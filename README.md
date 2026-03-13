@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ImmoSimple — Gestion locative moderne
 
-## Getting Started
+Landing page et liste d'attente pour ImmoSimple, un outil de gestion locative destiné aux propriétaires en France.
 
-First, run the development server:
+## Prérequis
+
+- Node.js 18+
+- pnpm
+
+## Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Configuration locale
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Copiez `.env.example` en `.env.local` :
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env.local
+```
 
-## Learn More
+2. Remplissez les variables d'environnement :
 
-To learn more about Next.js, take a look at the following resources:
+- **`KV_REST_API_URL`** / **`KV_REST_API_TOKEN`** : créez une base Upstash Redis via le dashboard Vercel (Storage → Create → KV) ou directement sur [upstash.com](https://upstash.com)
+- **`RESEND_API_KEY`** : créez un compte sur [resend.com](https://resend.com) et générez une clé API. En mode test, les emails sont envoyés uniquement à l'adresse du compte Resend.
+- **`OWNER_EMAIL`** : l'email qui recevra les notifications d'inscription
+- **`NEXT_PUBLIC_SITE_URL`** : `http://localhost:3000` en local
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Développement
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm dev
+```
 
-## Deploy on Vercel
+Le site est disponible sur [http://localhost:3000](http://localhost:3000).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Déploiement
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+vercel deploy
+```
+
+Ou connectez le repo à Vercel pour un déploiement automatique à chaque push.
+
+## Modifier le contenu
+
+| Section | Fichier |
+|---------|---------|
+| Hero (titre, sous-titre) | `components/Hero.tsx` |
+| Problèmes | `components/Problem.tsx` |
+| Fonctionnalités | `components/Features.tsx` |
+| Tarifs | `components/Pricing.tsx` |
+| Formulaire | `components/WaitlistForm.tsx` |
+| Footer | `components/Footer.tsx` |
+| Mentions légales | `app/mentions-legales/page.tsx` |
+| Politique de confidentialité | `app/politique-confidentialite/page.tsx` |
+| Métadonnées SEO | `app/layout.tsx` |
+
+## Changer le nom de marque
+
+Recherchez « ImmoSimple » dans le projet et remplacez-le par votre nom de marque. Fichiers concernés :
+
+- `components/Nav.tsx`
+- `components/Hero.tsx`
+- `components/Pricing.tsx`
+- `components/Footer.tsx`
+- `app/layout.tsx`
+- `app/mentions-legales/page.tsx`
+- `app/politique-confidentialite/page.tsx`
+- `app/api/waitlist/route.ts`
+
+## Consulter les inscriptions
+
+Les inscriptions sont stockées dans Vercel KV (Upstash Redis) :
+
+- **Compteur** : clé `waitlist_count`
+- **Liste** : clé `waitlist_emails` (liste JSON)
+
+Consultez-les via le [dashboard Vercel Storage](https://vercel.com/dashboard) ou le [dashboard Upstash](https://console.upstash.com).
+
+## Stack technique
+
+- Next.js (App Router)
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- Upstash Redis (Vercel KV)
+- Resend (emails)
+- Vercel Analytics
+- React Hook Form + Zod
