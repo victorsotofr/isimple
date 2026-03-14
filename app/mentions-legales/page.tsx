@@ -16,7 +16,7 @@ export default function MentionsLegales() {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-6xl px-6 py-16 sm:px-10 sm:py-20">
+      <main className="mx-auto max-w-6xl px-6 py-16 pb-24 sm:px-10 sm:py-20 sm:pb-28">
         <h1 className="text-4xl font-black tracking-tight text-ink sm:text-5xl">
           Mentions légales
         </h1>
