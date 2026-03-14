@@ -1,5 +1,6 @@
 import { Nav } from "@/components/Nav";
 import { Hero } from "@/components/Hero";
+import { Founder } from "@/components/Founder";
 import { Problem } from "@/components/Problem";
 import { Features } from "@/components/Features";
 import { Pricing } from "@/components/Pricing";
@@ -21,23 +22,11 @@ export default async function Home() {
     <>
       <Nav />
       <main>
-        {/* Open: Hero */}
         <Hero waitlistCount={waitlistCount} />
-
-        {/* Rounded container: Problem */}
-        <div className="mx-3 rounded-2xl bg-blue px-5 py-10 sm:mx-6 sm:rounded-3xl sm:px-10 sm:py-12">
-          <Problem />
-        </div>
-
-        {/* Open: Features */}
+        <Founder />
+        <Problem />
         <Features />
-
-        {/* Rounded container: Pricing */}
-        <div className="mx-3 rounded-2xl bg-blue px-5 py-10 sm:mx-6 sm:rounded-3xl sm:px-10 sm:py-12">
-          <Pricing />
-        </div>
-
-        {/* Open: Waitlist */}
+        <Pricing />
         <WaitlistForm />
       </main>
       <Footer />

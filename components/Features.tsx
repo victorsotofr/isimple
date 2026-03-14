@@ -1,40 +1,25 @@
-import {
-  Landmark,
-  FileSignature,
-  MessageSquare,
-  Wrench,
-  BarChart3,
-  Scale,
-} from "lucide-react";
-
 const features = [
   {
-    icon: Landmark,
     title: "Quittances automatiques",
     description: "Envoi automatique chaque mois, sans intervention.",
   },
   {
-    icon: FileSignature,
     title: "Baux numériques",
     description: "Signature électronique, archivage, rappels.",
   },
   {
-    icon: MessageSquare,
     title: "Portail locataire",
     description: "Signalements en ligne, suivi en temps réel.",
   },
   {
-    icon: Wrench,
     title: "Suivi des interventions",
     description: "De la demande à la résolution, tout est tracé.",
   },
   {
-    icon: BarChart3,
     title: "Tableau de bord",
     description: "Revenus, charges, fiscalité : une vue claire.",
   },
   {
-    icon: Scale,
     title: "Conformité légale",
     description: "Alertes DPE, assurances, révision de loyer.",
   },
@@ -42,29 +27,27 @@ const features = [
 
 export function Features() {
   return (
-    <section className="px-5 py-10 sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        <h2 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">
+    <section className="border-t border-slate-200">
+      <div className="mx-auto max-w-6xl px-6 py-16 sm:px-10 sm:py-20">
+        <h2 className="text-3xl font-black tracking-tight text-ink sm:text-4xl">
           Ce qu&apos;on construit
         </h2>
-        <p className="mt-1 text-base text-muted-text">
+        <p className="mt-2 text-base text-slate-500">
           Tout ce dont un propriétaire a besoin, dans un seul outil.
         </p>
 
-        <div className="mt-7 grid gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature) => (
-            <div key={feature.title} className="flex gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface">
-                <feature.icon className="size-[18px] text-blue" />
-              </div>
-              <div>
-                <h3 className="text-[15px] font-semibold text-ink">
-                  {feature.title}
-                </h3>
-                <p className="mt-0.5 text-sm leading-relaxed text-muted-text">
-                  {feature.description}
-                </p>
-              </div>
+        <div className="mt-12">
+          {features.map((feature, i) => (
+            <div
+              key={feature.title}
+              className={`grid gap-1 py-5 sm:grid-cols-2 sm:gap-8 ${
+                i < features.length - 1 ? "border-b border-slate-100" : ""
+              }`}
+            >
+              <p className="text-base font-bold text-ink">{feature.title}</p>
+              <p className="text-base leading-relaxed text-slate-500">
+                {feature.description}
+              </p>
             </div>
           ))}
         </div>

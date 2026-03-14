@@ -7,24 +7,24 @@ export const metadata: Metadata = {
 
 export default function MentionsLegales() {
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="border-b border-slate-200/60 bg-white px-4 py-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl">
-          <Link href="/" className="text-base font-semibold text-slate-900">
+    <>
+      <nav className="bg-white/80 backdrop-blur-sm">
+        <div className="mx-auto flex h-16 max-w-6xl items-center px-6 sm:px-10">
+          <Link href="/" className="text-xl font-black tracking-tight text-ink">
             ImmoSimple
           </Link>
         </div>
       </nav>
 
-      <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-semibold text-slate-900">
+      <main className="mx-auto max-w-6xl px-6 py-16 sm:px-10 sm:py-20">
+        <h1 className="text-4xl font-black tracking-tight text-ink sm:text-5xl">
           Mentions légales
         </h1>
 
-        <div className="mt-8 space-y-6 text-sm leading-relaxed text-slate-600">
+        <div className="mt-12 max-w-2xl space-y-10 text-base leading-relaxed text-slate-600">
           <section>
-            <h2 className="text-base font-medium text-slate-900">Éditeur du site</h2>
-            <p className="mt-2">
+            <h2 className="text-lg font-bold text-ink">Éditeur du site</h2>
+            <p className="mt-3">
               Nom : Victor Soto
               <br />
               Adresse : Paris, France
@@ -35,9 +35,11 @@ export default function MentionsLegales() {
             </p>
           </section>
 
+          <div className="border-t border-slate-100" />
+
           <section>
-            <h2 className="text-base font-medium text-slate-900">Hébergeur</h2>
-            <p className="mt-2">
+            <h2 className="text-lg font-bold text-ink">Hébergeur</h2>
+            <p className="mt-3">
               Vercel Inc.
               <br />
               440 N Barranca Ave #4133
@@ -48,11 +50,13 @@ export default function MentionsLegales() {
             </p>
           </section>
 
+          <div className="border-t border-slate-100" />
+
           <section>
-            <h2 className="text-base font-medium text-slate-900">
+            <h2 className="text-lg font-bold text-ink">
               Propriété intellectuelle
             </h2>
-            <p className="mt-2">
+            <p className="mt-3">
               L&apos;ensemble du contenu de ce site (textes, images, éléments
               graphiques) est protégé par le droit d&apos;auteur. Toute
               reproduction, même partielle, est interdite sans autorisation
@@ -60,16 +64,18 @@ export default function MentionsLegales() {
             </p>
           </section>
 
+          <div className="border-t border-slate-100" />
+
           <section>
-            <h2 className="text-base font-medium text-slate-900">
+            <h2 className="text-lg font-bold text-ink">
               Données personnelles
             </h2>
-            <p className="mt-2">
+            <p className="mt-3">
               Pour en savoir plus sur la gestion de vos données personnelles,
               consultez notre{" "}
               <Link
                 href="/politique-confidentialite"
-                className="text-blue-600 underline hover:text-blue-700"
+                className="font-medium text-ink underline underline-offset-4 hover:text-blue"
               >
                 politique de confidentialité
               </Link>
@@ -78,6 +84,6 @@ export default function MentionsLegales() {
           </section>
         </div>
       </main>
-    </div>
+    </>
   );
 }
