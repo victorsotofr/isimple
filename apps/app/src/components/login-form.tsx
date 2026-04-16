@@ -92,12 +92,6 @@ export function LoginForm() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Connexion en cours…' : 'Se connecter'}
           </Button>
-          <p className="text-sm text-muted-foreground text-center">
-            Pas encore de compte ?{' '}
-            <a href="/signup" className="underline underline-offset-4 hover:text-foreground">
-              Créer un compte
-            </a>
-          </p>
         </CardFooter>
       </form>
     </Card>
