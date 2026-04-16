@@ -14,15 +14,6 @@ export function Hero() {
         </p>
 
         <div className="mt-8 border-t border-slate-200" />
-
-        <div className="mt-8">
-          <a
-            href="#waitlist"
-            className="inline-block border border-ink bg-ink px-8 py-3.5 text-center text-base font-medium text-white transition-colors hover:bg-transparent hover:text-ink"
-          >
-            Rejoindre la liste d&apos;attente &rarr;
-          </a>
-        </div>
       </div>
     </section>
   );

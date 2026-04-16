@@ -10,12 +10,7 @@ export function Nav() {
         <Link href="/" className="text-xl font-black tracking-tight text-ink">
           ImmoSimple
         </Link>
-        <a
-          href="#waitlist"
-          className="border border-ink px-5 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink hover:text-white"
-        >
-          Rejoindre la liste d&apos;attente
-        </a>
+        <span className="text-sm text-slate-400">Bientôt disponible</span>
       </div>
     </nav>
   );

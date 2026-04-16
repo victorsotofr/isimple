@@ -13,9 +13,6 @@ export function Footer() {
             <Link href="/politique-confidentialite" className="hover:text-ink">
               Confidentialité
             </Link>
-            <a href="mailto:sotovictor@outlook.fr" className="hover:text-ink">
-              Contact
-            </a>
           </div>
         </div>
       </div>

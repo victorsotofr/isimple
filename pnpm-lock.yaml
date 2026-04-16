@@ -141,9 +141,6 @@ importers:
 
   apps/web:
     dependencies:
-      '@hookform/resolvers':
-        specifier: 3.9.1
-        version: 3.9.1(react-hook-form@7.71.2(react@19.2.3))
       '@vercel/analytics':
         specifier: ^2.0.1
         version: 2.0.1(next@16.1.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react@19.2.3)
@@ -168,9 +165,6 @@ importers:
       react-dom:
         specifier: 19.2.3
         version: 19.2.3(react@19.2.3)
-      react-hook-form:
-        specifier: ^7.71.2
-        version: 7.71.2(react@19.2.3)
       shadcn:
         specifier: ^4.0.6
         version: 4.0.6(@types/node@20.19.37)(typescript@5.9.3)
