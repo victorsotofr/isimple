@@ -1,0 +1,14 @@
+{
+  "name": "@isimple/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "gen": "openapi-typescript openapi.json -o src/generated.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7"
+  }
+}
