@@ -157,7 +157,7 @@ function UploadContent() {
     );
   }
 
-  if (step === 'review' && review) {
+  if ((step === 'review' || step === 'saving') && review) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3">
