@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001";
+
 export function Nav() {
   return (
     <nav
@@ -10,7 +12,12 @@ export function Nav() {
         <Link href="/" className="text-xl font-black tracking-tight text-ink">
           ImmoSimple
         </Link>
-        <span className="text-sm text-slate-400">Bientôt disponible</span>
+        <Link
+          href={`${APP_URL}/login`}
+          className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80"
+        >
+          Se connecter →
+        </Link>
       </div>
     </nav>
   );

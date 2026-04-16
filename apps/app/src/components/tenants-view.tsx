@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Users } from 'lucide-react';
+import { Plus, Users, Sparkles } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { SmartFillPanel } from '@/components/smart-fill-panel';
 import { useWorkspace } from '@/contexts/workspace-context';
 import { useLanguage } from '@/contexts/language-context';
 import { createClient } from '@/lib/supabase-browser';
@@ -30,7 +31,6 @@ const tenantSchema = z.object({
   deposit_amount: z.coerce.number().min(0).default(0).optional(),
 });
 type TenantForm = z.infer<typeof tenantSchema>;
-
 type TenantWithLot = Tenant & { lot?: Lot | null };
 
 export function TenantsView() {
@@ -43,6 +43,7 @@ export function TenantsView() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showAI, setShowAI] = useState(false);
 
   const form = useForm<TenantForm>({
     resolver: zodResolver(tenantSchema),
@@ -54,13 +55,11 @@ export function TenantsView() {
   useEffect(() => {
     if (!activeWorkspace) return;
     setLoading(true);
-
     Promise.all([
       supabase.from('tenants').select('*').eq('workspace_id', activeWorkspace.id).order('created_at', { ascending: false }),
       supabase.from('lots').select('*').eq('workspace_id', activeWorkspace.id),
       supabase.from('leases').select('tenant_id, lot_id, lots(*)').eq('workspace_id', activeWorkspace.id).eq('status', 'active'),
     ]).then(([tenantsRes, lotsRes, leasesRes]) => {
-      const lotMap = new Map((lotsRes.data ?? []).map(l => [l.id, l as Lot]));
       const tenantLotMap = new Map(
         (leasesRes.data ?? []).map(l => [
           l.tenant_id,
@@ -77,7 +76,6 @@ export function TenantsView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
 
-  // Pre-fill rent from selected lot
   useEffect(() => {
     if (!selectedLotId) return;
     const lot = lots.find(l => l.id === selectedLotId);
@@ -88,10 +86,17 @@ export function TenantsView() {
     }
   }, [selectedLotId, lots, form]);
 
+  const handleAIFill = (data: Record<string, unknown>) => {
+    if (data.first_name) form.setValue('first_name', data.first_name as string);
+    if (data.last_name) form.setValue('last_name', data.last_name as string);
+    if (data.email) form.setValue('email', data.email as string);
+    if (data.phone) form.setValue('phone', data.phone as string);
+    setShowAI(false);
+  };
+
   const onSubmit = async (values: TenantForm) => {
     if (!activeWorkspace) return;
     setSaving(true);
-
     const { data: tenant } = await supabase
       .from('tenants')
       .insert({
@@ -120,17 +125,19 @@ export function TenantsView() {
       const lot = values.lot_id ? lots.find(l => l.id === values.lot_id) ?? null : null;
       setTenants(prev => [{ ...(tenant as Tenant), lot }, ...prev]);
     }
-
     setSaving(false);
     setOpen(false);
+    setShowAI(false);
     form.reset();
   };
+
+  const handleOpen = () => { setShowAI(false); form.reset(); setOpen(true); };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">{t.tenants.title}</h1>
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button size="sm" onClick={handleOpen}>
           <Plus className="size-4 mr-2" />
           {t.tenants.add}
         </Button>
@@ -142,7 +149,7 @@ export function TenantsView() {
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
           <Users className="size-10 opacity-30" />
           <p className="text-sm">{t.tenants.empty}</p>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <Button variant="outline" size="sm" onClick={handleOpen}>
             <Plus className="size-4 mr-2" />{t.tenants.add}
           </Button>
         </div>
@@ -172,12 +179,33 @@ export function TenantsView() {
         </div>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setShowAI(false); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{t.tenants.add}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between">
+              {t.tenants.add}
+              {!showAI && (
+                <button
+                  type="button"
+                  onClick={() => setShowAI(true)}
+                  className="flex items-center gap-1 text-xs font-normal text-violet-600 hover:text-violet-700 transition-colors"
+                >
+                  <Sparkles className="size-3" />
+                  Remplir avec l'IA
+                </button>
+              )}
+            </DialogTitle>
           </DialogHeader>
+
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {showAI && (
+              <SmartFillPanel
+                type="tenant"
+                onFill={handleAIFill}
+                onClose={() => setShowAI(false)}
+              />
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>{t.tenants.firstName}</Label>

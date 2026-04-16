@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "@isimple/db": "workspace:*",
     "@isimple/i18n": "workspace:*",
     "@hookform/resolvers": "^3.9.1",

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Building2, Home, Car, Store } from 'lucide-react';
+import { Plus, Building2, Home, Car, Store, Sparkles } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { SmartFillPanel } from '@/components/smart-fill-panel';
 import { useWorkspace } from '@/contexts/workspace-context';
 import { useLanguage } from '@/contexts/language-context';
 import { createClient } from '@/lib/supabase-browser';
@@ -46,6 +47,7 @@ export function LotsView() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showAI, setShowAI] = useState(false);
 
   const form = useForm<LotForm>({
     resolver: zodResolver(lotSchema),
@@ -66,6 +68,19 @@ export function LotsView() {
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
+
+  const handleAIFill = (data: Record<string, unknown>) => {
+    if (data.address) form.setValue('address', data.address as string);
+    if (data.city) form.setValue('city', data.city as string);
+    if (data.postal_code) form.setValue('postal_code', data.postal_code as string);
+    if (data.type && ['apartment','house','studio','parking','commercial','other'].includes(data.type as string)) {
+      form.setValue('type', data.type as LotForm['type']);
+    }
+    if (data.area_m2) form.setValue('area_m2', data.area_m2 as number);
+    if (data.rent_amount) form.setValue('rent_amount', data.rent_amount as number);
+    if (data.charges_amount != null) form.setValue('charges_amount', data.charges_amount as number);
+    setShowAI(false);
+  };
 
   const onSubmit = async (values: LotForm) => {
     if (!activeWorkspace) return;
@@ -88,14 +103,17 @@ export function LotsView() {
     if (data) setLots(prev => [data as Lot, ...prev]);
     setSaving(false);
     setOpen(false);
+    setShowAI(false);
     form.reset();
   };
+
+  const handleOpen = () => { setShowAI(false); form.reset(); setOpen(true); };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">{t.lots.title}</h1>
-        <Button size="sm" onClick={() => setOpen(true)}>
+        <Button size="sm" onClick={handleOpen}>
           <Plus className="size-4 mr-2" />
           {t.lots.add}
         </Button>
@@ -107,7 +125,7 @@ export function LotsView() {
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
           <Building2 className="size-10 opacity-30" />
           <p className="text-sm">{t.lots.empty}</p>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <Button variant="outline" size="sm" onClick={handleOpen}>
             <Plus className="size-4 mr-2" />{t.lots.add}
           </Button>
         </div>
@@ -142,12 +160,33 @@ export function LotsView() {
         </div>
       )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setShowAI(false); }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t.lots.add}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between">
+              {t.lots.add}
+              {!showAI && (
+                <button
+                  type="button"
+                  onClick={() => setShowAI(true)}
+                  className="flex items-center gap-1 text-xs font-normal text-violet-600 hover:text-violet-700 transition-colors"
+                >
+                  <Sparkles className="size-3" />
+                  Remplir avec l'IA
+                </button>
+              )}
+            </DialogTitle>
           </DialogHeader>
+
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {showAI && (
+              <SmartFillPanel
+                type="lot"
+                onFill={handleAIFill}
+                onClose={() => setShowAI(false)}
+              />
+            )}
+
             <div className="space-y-2">
               <Label>{t.lots.address}</Label>
               <Input placeholder="12 rue de la Paix" {...form.register('address')} />
