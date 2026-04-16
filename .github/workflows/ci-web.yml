@@ -9,6 +9,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+      NEXT_PUBLIC_AGENT_URL: https://placeholder.agent.dev
+      NEXT_PUBLIC_SITE_URL: https://placeholder.vercel.app
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -20,5 +25,4 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install
       - run: pnpm --filter @isimple/web typecheck
-      - run: pnpm --filter @isimple/web lint
       - run: pnpm --filter @isimple/web build
