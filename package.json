@@ -1,6 +1,7 @@
 {
   "name": "isimple",
   "private": true,
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
     "dev": "concurrently --names 'app,agent' --prefix-colors 'cyan,green' 'turbo dev --filter=@isimple/app' 'cd apps/agent && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000'",
     "dev:all": "concurrently --names 'web,app,agent' --prefix-colors 'blue,cyan,green' 'turbo dev --filter=@isimple/web' 'turbo dev --filter=@isimple/app' 'cd apps/agent && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000'",
