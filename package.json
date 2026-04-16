@@ -1,22 +1,16 @@
 {
   "name": "isimple",
   "private": true,
-  "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "dev": "concurrently --names 'app,agent' --prefix-colors 'cyan,green' 'turbo dev --filter=@isimple/app' 'cd apps/agent && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000'",
-    "dev:all": "concurrently --names 'web,app,agent' --prefix-colors 'blue,cyan,green' 'turbo dev --filter=@isimple/web' 'turbo dev --filter=@isimple/app' 'cd apps/agent && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000'",
-    "dev:app": "turbo dev --filter=@isimple/app",
-    "dev:web": "turbo dev --filter=@isimple/web",
-    "dev:agent": "cd apps/agent && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000",
-    "build": "turbo build",
-    "lint": "turbo lint",
-    "typecheck": "turbo typecheck",
-    "seed": "node -e \"require('dotenv').config({path:'apps/app/.env.local'})\" scripts/seed.js",
-    "gen:contracts": "bash scripts/gen-contracts.sh"
+    "dev": "concurrently --names 'frontend,backend' --prefix-colors 'cyan,green' 'pnpm --dir frontend dev' 'cd backend && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000'",
+    "dev:frontend": "pnpm --dir frontend dev",
+    "dev:backend": "cd backend && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000",
+    "build": "pnpm --dir frontend build",
+    "lint": "pnpm --dir frontend lint",
+    "typecheck": "pnpm --dir frontend typecheck",
+    "seed": "pnpm --dir frontend seed"
   },
   "devDependencies": {
-    "concurrently": "^9",
-    "dotenv": "^16",
-    "turbo": "^2"
+    "concurrently": "^9"
   }
 }
