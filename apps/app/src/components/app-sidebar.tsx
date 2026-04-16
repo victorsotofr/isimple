@@ -24,7 +24,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import {
   DropdownMenu,
@@ -119,30 +118,21 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  isActive={pathname.startsWith('/settings')}
-                  onClick={() => router.push('/settings')}
-                >
-                  <Settings className="size-4" />
-                  <span>{t.nav.settings}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <UserMenu onLogout={handleLogout} logoutLabel={t.auth.logout} />
+            <SidebarMenuButton
+              isActive={pathname.startsWith('/settings')}
+              onClick={() => router.push('/settings')}
+            >
+              <Settings className="size-4" />
+              <span>{t.nav.settings}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <UserMenu onLogout={handleLogout} onSettings={() => router.push('/settings')} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -168,17 +158,20 @@ function WorkspaceName({ name, loading }: { name?: string; loading: boolean }) {
   );
 }
 
-function UserMenu({ onLogout, logoutLabel }: { onLogout: () => void; logoutLabel: string }) {
+function UserMenu({ onLogout, onSettings }: { onLogout: () => void; onSettings: () => void }) {
   const supabase = createClient();
   const [email, setEmail] = useState<string | null>(null);
+  const [name, setName] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null);
+      setName(data.user?.user_metadata?.full_name ?? null);
     });
   }, [supabase]);
 
   const initials = email ? email.slice(0, 2).toUpperCase() : '?';
+  const displayName = name ?? email ?? '...';
 
   return (
     <DropdownMenu>
@@ -188,17 +181,25 @@ function UserMenu({ onLogout, logoutLabel }: { onLogout: () => void; logoutLabel
             <AvatarFallback className="rounded-lg text-xs">{initials}</AvatarFallback>
           </Avatar>
           <div className="grid flex-1 text-left text-sm leading-tight">
+            <span className="truncate font-medium">{displayName}</span>
             <span className="truncate text-xs text-muted-foreground">{email ?? '...'}</span>
           </div>
           <ChevronsUpDown className="ml-auto size-4 shrink-0 opacity-50" />
         </SidebarMenuButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-56">
-        <DropdownMenuLabel className="text-xs text-muted-foreground truncate">{email}</DropdownMenuLabel>
+        <DropdownMenuLabel className="flex flex-col gap-0.5">
+          <span className="font-medium">{displayName}</span>
+          <span className="text-xs font-normal text-muted-foreground truncate">{email}</span>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onSettings} className="gap-2">
+          <Settings className="size-4" />
+          Paramètres
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={onLogout} className="gap-2 text-destructive focus:text-destructive">
           <LogOut className="size-4" />
-          {logoutLabel}
+          Se déconnecter
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
