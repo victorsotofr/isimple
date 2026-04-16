@@ -3,35 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
-  Building2,
-  MessageSquare,
-  Home,
-  Users,
-  Calendar,
-  Wrench,
-  BarChart2,
-  Settings,
-  LogOut,
-  ChevronsUpDown,
+  Home, Users, MessageSquare, Ticket, Wrench,
+  Calendar, BarChart2, FileText, Settings, Building2, ChevronsUpDown,
 } from 'lucide-react';
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup,
+  SidebarGroupContent, SidebarHeader, SidebarMenu,
+  SidebarMenuButton, SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useWorkspace } from '@/contexts/workspace-context';
@@ -39,12 +21,14 @@ import { useLanguage } from '@/contexts/language-context';
 import { createClient } from '@/lib/supabase-browser';
 
 const NAV_ITEMS = [
-  { key: 'inbox' as const, href: '/inbox', icon: MessageSquare },
   { key: 'lots' as const, href: '/lots', icon: Home },
   { key: 'tenants' as const, href: '/tenants', icon: Users },
-  { key: 'agenda' as const, href: '/agenda', icon: Calendar },
+  { key: 'inbox' as const, href: '/inbox', icon: MessageSquare },
+  { key: 'tickets' as const, href: '/tickets', icon: Ticket },
   { key: 'contractors' as const, href: '/prestataires', icon: Wrench },
+  { key: 'agenda' as const, href: '/agenda', icon: Calendar },
   { key: 'analytics' as const, href: '/analytics', icon: BarChart2 },
+  { key: 'documents' as const, href: '/documents', icon: FileText },
 ] as const;
 
 export function AppSidebar() {
@@ -52,12 +36,6 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { t } = useLanguage();
   const { activeWorkspace, workspaces, setActiveWorkspace, loading } = useWorkspace();
-  const supabase = createClient();
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/login');
-  };
 
   return (
     <Sidebar>
@@ -132,7 +110,7 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <UserMenu onLogout={handleLogout} onSettings={() => router.push('/settings')} />
+            <UserButton onNavigate={(href) => router.push(href)} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
@@ -158,7 +136,7 @@ function WorkspaceName({ name, loading }: { name?: string; loading: boolean }) {
   );
 }
 
-function UserMenu({ onLogout, onSettings }: { onLogout: () => void; onSettings: () => void }) {
+function UserButton({ onNavigate }: { onNavigate: (href: string) => void }) {
   const supabase = createClient();
   const [email, setEmail] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
@@ -166,42 +144,29 @@ function UserMenu({ onLogout, onSettings }: { onLogout: () => void; onSettings: 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setEmail(data.user?.email ?? null);
-      setName(data.user?.user_metadata?.full_name ?? null);
+      const meta = data.user?.user_metadata;
+      const full = meta?.first_name && meta?.last_name
+        ? `${meta.first_name} ${meta.last_name}`
+        : (meta?.full_name ?? null);
+      setName(full);
     });
-  }, [supabase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const initials = email ? email.slice(0, 2).toUpperCase() : '?';
+  const initials = name
+    ? name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
+    : (email ? email.slice(0, 2).toUpperCase() : '?');
   const displayName = name ?? email ?? '...';
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
-          <Avatar className="size-8 rounded-lg">
-            <AvatarFallback className="rounded-lg text-xs">{initials}</AvatarFallback>
-          </Avatar>
-          <div className="grid flex-1 text-left text-sm leading-tight">
-            <span className="truncate font-medium">{displayName}</span>
-            <span className="truncate text-xs text-muted-foreground">{email ?? '...'}</span>
-          </div>
-          <ChevronsUpDown className="ml-auto size-4 shrink-0 opacity-50" />
-        </SidebarMenuButton>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-56">
-        <DropdownMenuLabel className="flex flex-col gap-0.5">
-          <span className="font-medium">{displayName}</span>
-          <span className="text-xs font-normal text-muted-foreground truncate">{email}</span>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onSettings} className="gap-2">
-          <Settings className="size-4" />
-          Paramètres
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={onLogout} className="gap-2 text-destructive focus:text-destructive">
-          <LogOut className="size-4" />
-          Se déconnecter
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <SidebarMenuButton size="lg" onClick={() => onNavigate('/profile')}>
+      <Avatar className="size-8 rounded-lg">
+        <AvatarFallback className="rounded-lg text-xs">{initials}</AvatarFallback>
+      </Avatar>
+      <div className="grid flex-1 text-left text-sm leading-tight">
+        <span className="truncate font-medium">{displayName}</span>
+        <span className="truncate text-xs text-muted-foreground">{email ?? '...'}</span>
+      </div>
+    </SidebarMenuButton>
   );
 }

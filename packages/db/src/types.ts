@@ -230,6 +230,47 @@ export interface Database {
           last_message_at?: string;
         };
       };
+      documents: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          file_name: string;
+          file_path: string;
+          doc_type: 'bail' | 'quittance' | 'etat_des_lieux' | 'facture' | 'autre';
+          status: 'pending' | 'confirmed';
+          extracted_data: Json | null;
+          lot_id: string | null;
+          tenant_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          file_name: string;
+          file_path: string;
+          doc_type?: 'bail' | 'quittance' | 'etat_des_lieux' | 'facture' | 'autre';
+          status?: 'pending' | 'confirmed';
+          extracted_data?: Json | null;
+          lot_id?: string | null;
+          tenant_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          file_name?: string;
+          file_path?: string;
+          doc_type?: 'bail' | 'quittance' | 'etat_des_lieux' | 'facture' | 'autre';
+          status?: 'pending' | 'confirmed';
+          extracted_data?: Json | null;
+          lot_id?: string | null;
+          tenant_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       messages: {
         Row: {
           id: string;
@@ -266,6 +307,7 @@ export interface Database {
   };
 }
 
+export type Document = Database['public']['Tables']['documents']['Row'];
 export type Workspace = Database['public']['Tables']['workspaces']['Row'];
 export type WorkspaceMember = Database['public']['Tables']['workspace_members']['Row'];
 export type WorkspaceInvitation = Database['public']['Tables']['workspace_invitations']['Row'];
