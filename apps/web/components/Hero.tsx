@@ -1,4 +1,4 @@
-export function Hero({ waitlistCount }: { waitlistCount: number }) {
+export function Hero() {
   return (
     <section className="px-6 pt-28 pb-16 sm:px-10 sm:pt-36 sm:pb-20">
       <div className="mx-auto max-w-6xl">
@@ -15,21 +15,13 @@ export function Hero({ waitlistCount }: { waitlistCount: number }) {
 
         <div className="mt-8 border-t border-slate-200" />
 
-        <div className="mt-8 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-8">
           <a
             href="#waitlist"
             className="inline-block border border-ink bg-ink px-8 py-3.5 text-center text-base font-medium text-white transition-colors hover:bg-transparent hover:text-ink"
           >
             Rejoindre la liste d&apos;attente &rarr;
           </a>
-
-          {waitlistCount > 0 && (
-            <p className="text-base text-slate-500">
-              Déjà{" "}
-              <span className="font-semibold text-ink">{waitlistCount}</span>{" "}
-              propriétaires inscrits
-            </p>
-          )}
         </div>
       </div>
     </section>
