@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Building2, Home, Car, Store, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { Plus, Building2, Home, Car, Store, Sparkles, ChevronRight } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -134,7 +135,11 @@ export function LotsView() {
           {lots.map((lot) => {
             const Icon = TYPE_ICONS[lot.type];
             return (
-              <div key={lot.id} className="flex items-center gap-4 p-4">
+              <Link
+                key={lot.id}
+                href={`/lots/${lot.id}`}
+                className="flex items-center gap-4 p-4 hover:bg-muted/40 transition-colors group"
+              >
                 <div className="flex size-9 items-center justify-center rounded-lg bg-muted shrink-0">
                   <Icon className="size-4 text-muted-foreground" />
                 </div>
@@ -154,7 +159,8 @@ export function LotsView() {
                     <p className="text-xs text-muted-foreground">+ {lot.charges_amount} € charges</p>
                   )}
                 </div>
-              </div>
+                <ChevronRight className="size-4 text-muted-foreground/40 shrink-0 group-hover:text-muted-foreground transition-colors" />
+              </Link>
             );
           })}
         </div>

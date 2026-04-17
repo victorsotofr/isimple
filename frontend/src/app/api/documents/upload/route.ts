@@ -8,19 +8,82 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const EXTRACT_PROMPT = `Tu es un assistant spécialisé en gestion locative immobilière française.
 Extrais les informations de ce document immobilier.
-Retourne UNIQUEMENT du JSON valide avec ces champs (null si inconnu) :
+
+IMPORTANT : Distingue strictement les LOCATAIRES des BAILLEURS / PROPRIÉTAIRES.
+- Les LOCATAIRES ("preneur", "locataire", "les Locataires") louent le bien. Extrais-les tous.
+- Le BAILLEUR ("bailleur", "propriétaire", "loueur") n'est PAS un locataire — ne l'inclus JAMAIS dans "tenants".
+- Un bail peut avoir plusieurs colocataires : renvoie-les tous dans le tableau.
+
+Pour l'adresse du BIEN loué (pas celle du bailleur) :
+- "property_address" doit inclure le numéro et la rue, sans la ville ni le code postal (ex: "8 rue des Trois Frères").
+- "property_city" la ville seule (ex: "Paris").
+- "property_postal_code" le code postal seul (ex: "75018").
+- "property_type" : apartment | house | studio | parking | commercial | other (apartment si incertain).
+- "property_area_m2" : surface en m² si mentionnée, sinon null.
+
+Retourne UNIQUEMENT du JSON valide (null ou [] si inconnu) :
 {
   "doc_type": "bail" | "quittance" | "etat_des_lieux" | "facture" | "autre",
-  "tenant_first_name": string | null,
-  "tenant_last_name": string | null,
-  "tenant_email": string | null,
+  "tenants": [{ "first_name": string, "last_name": string, "email": string | null }],
+  "landlord_last_name": string | null,
   "property_address": string | null,
   "property_city": string | null,
   "property_postal_code": string | null,
+  "property_type": "apartment" | "house" | "studio" | "parking" | "commercial" | "other" | null,
+  "property_area_m2": number | null,
   "document_date": "YYYY-MM-DD" | null,
   "rent_amount": number | null,
+  "charges_amount": number | null,
   "summary": "résumé en 1-2 phrases en français"
 }`;
+
+type PropertyType = 'apartment' | 'house' | 'studio' | 'parking' | 'commercial' | 'other';
+const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'studio', 'parking', 'commercial', 'other'];
+
+function normalizeText(s: string): string {
+  return s
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[.,;:'"()\-_/\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const ABBR_MAP: Record<string, string> = {
+  bd: 'boulevard', bld: 'boulevard', blvd: 'boulevard',
+  av: 'avenue', ave: 'avenue',
+  pl: 'place',
+  r: 'rue',
+  imp: 'impasse',
+  sq: 'square',
+  ch: 'chemin',
+  st: 'saint', ste: 'sainte',
+};
+
+function expandAbbr(s: string): string {
+  return s
+    .split(' ')
+    .map(w => ABBR_MAP[w] ?? w)
+    .join(' ');
+}
+
+function normalizeAddress(s: string): string {
+  return expandAbbr(normalizeText(s));
+}
+
+function normalizeName(s: string): string {
+  return normalizeText(s);
+}
+
+function normalizeEmail(s: string): string {
+  return s.trim().toLowerCase();
+}
+
+function generatePlaceholderEmail(first: string, last: string): string {
+  const slug = normalizeText(`${first}.${last}`).replace(/\s+/g, '.');
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${slug}.${suffix}@placeholder.local`;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -92,29 +155,150 @@ export async function POST(req: NextRequest) {
       console.warn('[documents/upload] AI extraction failed:', aiErr);
     }
 
-    // Try to match lot and tenant from extracted data
+    // ---------- Match or auto-create the lot ----------
     let suggestedLotId: string | null = null;
-    let suggestedTenantId: string | null = null;
+    let createdLotId: string | null = null;
 
-    if (extractedData.tenant_last_name) {
-      const { data: matchedTenants } = await admin
-        .from('tenants')
-        .select('id, last_name')
-        .eq('workspace_id', workspaceId)
-        .ilike('last_name', `%${extractedData.tenant_last_name}%`)
-        .limit(1);
-      if (matchedTenants?.length) suggestedTenantId = matchedTenants[0].id;
-    }
+    const propAddress = typeof extractedData.property_address === 'string' ? extractedData.property_address.trim() : '';
+    const propCity = typeof extractedData.property_city === 'string' ? extractedData.property_city.trim() : '';
+    const propPostal = typeof extractedData.property_postal_code === 'string' ? extractedData.property_postal_code.trim() : '';
+    const propType = PROPERTY_TYPES.includes(extractedData.property_type as PropertyType)
+      ? (extractedData.property_type as PropertyType)
+      : 'apartment';
+    const propArea = typeof extractedData.property_area_m2 === 'number' ? extractedData.property_area_m2 : null;
+    const rentAmount = typeof extractedData.rent_amount === 'number' ? extractedData.rent_amount : 0;
+    const chargesAmount = typeof extractedData.charges_amount === 'number' ? extractedData.charges_amount : 0;
 
-    if (extractedData.property_address) {
-      const { data: matchedLots } = await admin
+    if (propAddress) {
+      const { data: allLots } = await admin
         .from('lots')
-        .select('id, address')
-        .eq('workspace_id', workspaceId)
-        .ilike('address', `%${String(extractedData.property_address).split(' ').slice(1).join(' ')}%`)
-        .limit(1);
-      if (matchedLots?.length) suggestedLotId = matchedLots[0].id;
+        .select('id, address, city, postal_code')
+        .eq('workspace_id', workspaceId);
+
+      const normExtracted = normalizeAddress(propAddress);
+      const normCity = propCity ? normalizeText(propCity) : '';
+
+      // Score each lot: exact normalized match > substring match (scoped by postal/city if available).
+      let best: { id: string; score: number } | null = null;
+      for (const lot of allLots ?? []) {
+        const normLot = normalizeAddress(lot.address);
+        let score = 0;
+        if (normLot === normExtracted) score = 100;
+        else if (normLot.includes(normExtracted) || normExtracted.includes(normLot)) score = 70;
+        if (score > 0) {
+          if (propPostal && lot.postal_code === propPostal) score += 20;
+          else if (propPostal && lot.postal_code !== propPostal) score -= 30;
+          if (normCity && normalizeText(lot.city) === normCity) score += 10;
+        }
+        if (score > 0 && (!best || score > best.score)) {
+          best = { id: lot.id, score };
+        }
+      }
+
+      if (best && best.score >= 50) {
+        suggestedLotId = best.id;
+      } else if (propAddress && propCity && propPostal) {
+        // Auto-create the lot when we have the three essential fields.
+        const { data: newLot, error: lotErr } = await admin
+          .from('lots')
+          .insert({
+            workspace_id: workspaceId,
+            address: propAddress,
+            city: propCity,
+            postal_code: propPostal,
+            type: propType,
+            area_m2: propArea,
+            rent_amount: rentAmount,
+            charges_amount: chargesAmount,
+          })
+          .select('id')
+          .single();
+        if (!lotErr && newLot) {
+          suggestedLotId = newLot.id;
+          createdLotId = newLot.id;
+        } else if (lotErr) {
+          console.warn('[documents/upload] auto-create lot failed:', lotErr);
+        }
+      }
     }
+
+    // ---------- Match or auto-create tenants ----------
+    const extractedTenants = Array.isArray(extractedData.tenants)
+      ? (extractedData.tenants as Array<{ first_name?: string; last_name?: string; email?: string | null }>)
+      : [];
+
+    // Deduplicate extracted tenants (AI sometimes repeats the same person).
+    const dedupedExtracted: typeof extractedTenants = [];
+    const seenKeys = new Set<string>();
+    for (const t of extractedTenants) {
+      if (!t.first_name || !t.last_name) continue;
+      const key = t.email
+        ? `e:${normalizeEmail(t.email)}`
+        : `n:${normalizeName(t.first_name)}|${normalizeName(t.last_name)}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      dedupedExtracted.push(t);
+    }
+
+    // Load every workspace tenant once for fuzzy matching.
+    const { data: allTenants } = await admin
+      .from('tenants')
+      .select('id, first_name, last_name, email')
+      .eq('workspace_id', workspaceId);
+
+    const suggestedTenantIds: string[] = [];
+    const createdTenantIds: string[] = [];
+
+    for (const t of dedupedExtracted) {
+      const fn = (t.first_name ?? '').trim();
+      const ln = (t.last_name ?? '').trim();
+      const emailNorm = t.email ? normalizeEmail(t.email) : '';
+      const fnNorm = normalizeName(fn);
+      const lnNorm = normalizeName(ln);
+
+      let matchId: string | null = null;
+      for (const row of allTenants ?? []) {
+        if (emailNorm && normalizeEmail(row.email) === emailNorm) { matchId = row.id; break; }
+      }
+      if (!matchId) {
+        // Require both first + last to match (normalized) before linking existing tenants.
+        // Last-name-only matching previously caused false positives (e.g. landlord with same surname).
+        for (const row of allTenants ?? []) {
+          if (normalizeName(row.last_name) === lnNorm && normalizeName(row.first_name) === fnNorm) {
+            matchId = row.id;
+            break;
+          }
+        }
+      }
+
+      if (matchId) {
+        if (!suggestedTenantIds.includes(matchId)) suggestedTenantIds.push(matchId);
+        continue;
+      }
+
+      // No match — auto-create. Use extracted email if provided, otherwise a placeholder
+      // the user can fix from the tenants page.
+      const email = emailNorm || generatePlaceholderEmail(fn, ln);
+      const { data: newTenant, error: tErr } = await admin
+        .from('tenants')
+        .insert({
+          workspace_id: workspaceId,
+          first_name: fn,
+          last_name: ln,
+          email,
+        })
+        .select('id')
+        .single();
+      if (!tErr && newTenant) {
+        suggestedTenantIds.push(newTenant.id);
+        createdTenantIds.push(newTenant.id);
+        allTenants?.push({ id: newTenant.id, first_name: fn, last_name: ln, email });
+      } else if (tErr) {
+        console.warn('[documents/upload] auto-create tenant failed:', tErr);
+      }
+    }
+
+    const suggestedTenantId = suggestedTenantIds[0] ?? null;
 
     // Create document record
     const { data: doc, error: dbError } = await admin
@@ -137,6 +321,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Erreur base de données' }, { status: 500 });
     }
 
+    // Persist every matched tenant in the junction table.
+    if (suggestedTenantIds.length > 0) {
+      await admin.from('document_tenants').insert(
+        suggestedTenantIds.map(tenantId => ({
+          document_id: doc.id,
+          tenant_id: tenantId,
+          workspace_id: workspaceId,
+        }))
+      );
+    }
+
     // Generate signed URL for review
     const { data: signedData } = await admin.storage
       .from('documents')
@@ -147,6 +342,9 @@ export async function POST(req: NextRequest) {
       signed_url: signedData?.signedUrl ?? '',
       suggested_lot_id: suggestedLotId,
       suggested_tenant_id: suggestedTenantId,
+      suggested_tenant_ids: suggestedTenantIds,
+      created_lot_id: createdLotId,
+      created_tenant_ids: createdTenantIds,
     }, { status: 201 });
   } catch (e) {
     console.error('[documents/upload]', e);

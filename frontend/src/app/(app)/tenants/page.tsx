@@ -1,5 +1,10 @@
+import { Suspense } from 'react';
 import { TenantsView } from '@/components/tenants-view';
 
 export default function TenantsPage() {
-  return <TenantsView />;
+  return (
+    <Suspense>
+      <TenantsView />
+    </Suspense>
+  );
 }

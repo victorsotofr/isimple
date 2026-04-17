@@ -1,15 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Upload, Eye, Pencil, Trash2, AlertCircle } from 'lucide-react';
+import {
+  FileText, Upload, Eye, Pencil, Trash2, AlertCircle,
+  CheckCircle2, Loader2, Home, User, Plus,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useWorkspace } from '@/contexts/workspace-context';
 import { createClient } from '@/lib/supabase-browser';
 import type { Document, Lot, Tenant } from '@/db';
 
-type DocWithRefs = Document & { lot?: Lot | null; tenant?: Tenant | null };
+type DocWithRefs = Document & {
+  lot?: Lot | null;
+  tenants: Tenant[];
+  summary?: string | null;
+};
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   bail: 'Bail',
@@ -26,6 +33,7 @@ export default function DocumentsPage() {
 
   const [docs, setDocs] = useState<DocWithRefs[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeWorkspace) return;
@@ -34,21 +42,33 @@ export default function DocumentsPage() {
       supabase.from('documents').select('*').eq('workspace_id', activeWorkspace.id).order('created_at', { ascending: false }),
       supabase.from('lots').select('*').eq('workspace_id', activeWorkspace.id),
       supabase.from('tenants').select('*').eq('workspace_id', activeWorkspace.id),
-    ]).then(([docsRes, lotsRes, tenantsRes]) => {
+      supabase.from('document_tenants').select('document_id, tenant_id').eq('workspace_id', activeWorkspace.id),
+    ]).then(([docsRes, lotsRes, tenantsRes, linksRes]) => {
       const lotsMap = new Map((lotsRes.data ?? []).map(l => [l.id, l as Lot]));
       const tenantsMap = new Map((tenantsRes.data ?? []).map(t => [t.id, t as Tenant]));
-      setDocs(((docsRes.data ?? []) as Document[]).map(d => ({
-        ...d,
-        lot: d.lot_id ? (lotsMap.get(d.lot_id) ?? null) : null,
-        tenant: d.tenant_id ? (tenantsMap.get(d.tenant_id) ?? null) : null,
-      })));
+      const linksByDoc = new Map<string, string[]>();
+      for (const row of (linksRes.data ?? [])) {
+        const list = linksByDoc.get(row.document_id) ?? [];
+        list.push(row.tenant_id);
+        linksByDoc.set(row.document_id, list);
+      }
+      setDocs(((docsRes.data ?? []) as Document[]).map(d => {
+        const linkedIds = linksByDoc.get(d.id) ?? (d.tenant_id ? [d.tenant_id] : []);
+        const extracted = (d.extracted_data as { summary?: string } | null) ?? null;
+        return {
+          ...d,
+          lot: d.lot_id ? (lotsMap.get(d.lot_id) ?? null) : null,
+          tenants: linkedIds.map(id => tenantsMap.get(id)).filter((t): t is Tenant => !!t),
+          summary: extracted?.summary ?? null,
+        };
+      }));
       setLoading(false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
 
-  const pending = docs.filter(d => d.status === 'pending');
-  const confirmed = docs.filter(d => d.status === 'confirmed');
+  const pending = useMemo(() => docs.filter(d => d.status === 'pending'), [docs]);
+  const confirmed = useMemo(() => docs.filter(d => d.status === 'confirmed'), [docs]);
 
   const handleView = async (doc: Document) => {
     const res = await fetch(`/api/documents/${doc.id}/url`);
@@ -58,16 +78,43 @@ export default function DocumentsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Supprimer ce document ?')) return;
-    await fetch(`/api/documents/${id}`, { method: 'DELETE' });
-    setDocs(prev => prev.filter(d => d.id !== id));
+  const handleDelete = async (doc: DocWithRefs) => {
+    if (!confirm(`Supprimer « ${doc.file_name} » ? Cette action est irréversible.`)) return;
+    setBusyId(doc.id);
+    const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' });
+    if (res.ok) setDocs(prev => prev.filter(d => d.id !== doc.id));
+    setBusyId(null);
+  };
+
+  const handleQuickConfirm = async (doc: DocWithRefs) => {
+    setBusyId(doc.id);
+    const res = await fetch(`/api/documents/${doc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'confirmed',
+        doc_type: doc.doc_type,
+        lot_id: doc.lot_id,
+        tenant_ids: doc.tenants.map(t => t.id),
+      }),
+    });
+    if (res.ok) {
+      setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'confirmed' } : d));
+    }
+    setBusyId(null);
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Documents</h1>
+        <div>
+          <h1 className="text-xl font-semibold">Documents</h1>
+          {pending.length > 0 && (
+            <p className="text-sm text-amber-700 mt-0.5">
+              {pending.length} document{pending.length > 1 ? 's' : ''} à réviser
+            </p>
+          )}
+        </div>
         <Button size="sm" onClick={() => router.push('/documents/upload')}>
           <Upload className="size-4 mr-2" />
           Importer
@@ -87,56 +134,168 @@ export default function DocumentsPage() {
       ) : (
         <>
           {pending.length > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
-                <AlertCircle className="size-4" />
-                {pending.length} document{pending.length > 1 ? 's' : ''} à réviser
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <AlertCircle className="size-4 text-amber-600" />
+                <span>À réviser</span>
+                <span className="text-muted-foreground font-normal">· {pending.length}</span>
               </div>
-              {pending.map(doc => (
-                <div key={doc.id} className="flex items-center gap-3 rounded-md bg-white border p-3">
-                  <FileText className="size-4 text-muted-foreground shrink-0" />
-                  <span className="flex-1 text-sm truncate">{doc.file_name}</span>
-                  <Button size="sm" variant="outline" onClick={() => router.push(`/documents/upload?review=${doc.id}`)}>
-                    Réviser
-                  </Button>
-                </div>
-              ))}
-            </div>
+
+              <div className="space-y-2">
+                {pending.map(doc => (
+                  <PendingCard
+                    key={doc.id}
+                    doc={doc}
+                    busy={busyId === doc.id}
+                    onConfirm={() => handleQuickConfirm(doc)}
+                    onEdit={() => router.push(`/documents/upload?review=${doc.id}`)}
+                    onDelete={() => handleDelete(doc)}
+                    onView={() => handleView(doc)}
+                  />
+                ))}
+
+                <button
+                  onClick={() => router.push('/documents/upload')}
+                  className="flex items-center gap-2 text-xs text-violet-600 hover:text-violet-700 transition-colors px-2 py-1"
+                >
+                  <Plus className="size-3.5" />
+                  Importer d&apos;autres documents
+                </button>
+              </div>
+            </section>
           )}
 
           {confirmed.length > 0 && (
-            <div className="rounded-lg border divide-y">
-              {confirmed.map(doc => (
-                <div key={doc.id} className="flex items-center gap-4 p-4">
-                  <FileText className="size-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{doc.file_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(doc.created_at).toLocaleDateString('fr-FR')}
-                      {doc.lot && ` · ${doc.lot.address}, ${doc.lot.city}`}
-                      {doc.tenant && ` · ${doc.tenant.first_name} ${doc.tenant.last_name}`}
-                    </p>
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium text-muted-foreground">
+                Coffre-fort · {confirmed.length}
+              </h2>
+              <div className="rounded-lg border divide-y">
+                {confirmed.map(doc => (
+                  <div key={doc.id} className="flex items-center gap-4 p-4">
+                    <FileText className="size-4 text-muted-foreground shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.file_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {new Date(doc.created_at).toLocaleDateString('fr-FR')}
+                        {doc.lot && ` · ${doc.lot.address}, ${doc.lot.city}`}
+                        {doc.tenants.length > 0 && ` · ${doc.tenants.map(t => `${t.first_name} ${t.last_name}`).join(', ')}`}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      {DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}
+                    </Badge>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button size="icon" variant="ghost" className="size-8" onClick={() => handleView(doc)} aria-label="Voir">
+                        <Eye className="size-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="size-8" onClick={() => router.push(`/documents/upload?review=${doc.id}`)} aria-label="Modifier">
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(doc)}
+                        aria-label="Supprimer"
+                        disabled={busyId === doc.id}
+                      >
+                        {busyId === doc.id ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                      </Button>
+                    </div>
                   </div>
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    {DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}
-                  </Badge>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="size-8" onClick={() => handleView(doc)}>
-                      <Eye className="size-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="size-8" onClick={() => router.push(`/documents/upload?review=${doc.id}`)}>
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="size-8 text-destructive hover:text-destructive" onClick={() => handleDelete(doc.id)}>
-                      <Trash2 className="size-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </section>
           )}
         </>
       )}
+    </div>
+  );
+}
+
+function PendingCard({
+  doc, busy, onConfirm, onEdit, onDelete, onView,
+}: {
+  doc: DocWithRefs;
+  busy: boolean;
+  onConfirm: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onView: () => void;
+}) {
+  const hasAssociations = !!doc.lot || doc.tenants.length > 0;
+  const canQuickConfirm = hasAssociations;
+
+  return (
+    <div className="rounded-lg border bg-card p-4 space-y-3 hover:border-foreground/20 transition-colors">
+      <div className="flex items-start gap-3">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-amber-50 text-amber-700 shrink-0">
+          <FileText className="size-4" />
+        </div>
+        <div className="flex-1 min-w-0 space-y-1">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onView}
+              className="text-sm font-medium truncate hover:underline text-left"
+              title="Ouvrir le PDF"
+            >
+              {doc.file_name}
+            </button>
+            <Badge variant="secondary" className="text-[10px] shrink-0">
+              {DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}
+            </Badge>
+          </div>
+          {doc.summary && (
+            <p className="text-xs text-muted-foreground line-clamp-2">{doc.summary}</p>
+          )}
+        </div>
+        <button
+          onClick={onDelete}
+          disabled={busy}
+          className="text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50 p-1 -m-1"
+          aria-label="Supprimer"
+          title="Supprimer"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </div>
+
+      {hasAssociations && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs pl-12">
+          {doc.lot && (
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <Home className="size-3" />
+              <span className="truncate max-w-[300px]">{doc.lot.address}, {doc.lot.city}</span>
+            </span>
+          )}
+          {doc.tenants.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <User className="size-3" />
+              <span className="truncate max-w-[300px]">
+                {doc.tenants.map(t => `${t.first_name} ${t.last_name}`).join(', ')}
+              </span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {!hasAssociations && (
+        <p className="text-xs text-amber-600 pl-12">
+          Aucune association détectée — ouvrez pour réviser
+        </p>
+      )}
+
+      <div className="flex items-center justify-end gap-2 pl-12">
+        <Button size="sm" variant="outline" onClick={onEdit} disabled={busy}>
+          <Pencil className="size-3 mr-1.5" />
+          Modifier
+        </Button>
+        <Button size="sm" onClick={onConfirm} disabled={busy || !canQuickConfirm}>
+          {busy ? <Loader2 className="size-3 mr-1.5 animate-spin" /> : <CheckCircle2 className="size-3 mr-1.5" />}
+          Confirmer
+        </Button>
+      </div>
     </div>
   );
 }

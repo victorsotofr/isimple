@@ -271,6 +271,26 @@ export interface Database {
           updated_at?: string;
         };
       };
+      document_tenants: {
+        Row: {
+          document_id: string;
+          tenant_id: string;
+          workspace_id: string;
+          created_at: string;
+        };
+        Insert: {
+          document_id: string;
+          tenant_id: string;
+          workspace_id: string;
+          created_at?: string;
+        };
+        Update: {
+          document_id?: string;
+          tenant_id?: string;
+          workspace_id?: string;
+          created_at?: string;
+        };
+      };
       messages: {
         Row: {
           id: string;
@@ -308,6 +328,7 @@ export interface Database {
 }
 
 export type Document = Database['public']['Tables']['documents']['Row'];
+export type DocumentTenant = Database['public']['Tables']['document_tenants']['Row'];
 export type Workspace = Database['public']['Tables']['workspaces']['Row'];
 export type WorkspaceMember = Database['public']['Tables']['workspace_members']['Row'];
 export type WorkspaceInvitation = Database['public']['Tables']['workspace_invitations']['Row'];

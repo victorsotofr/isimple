@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Users, Sparkles } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { Plus, Users, Sparkles, Pencil, Trash2, FileText } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
 import { SmartFillPanel } from '@/components/smart-fill-panel';
 import { useWorkspace } from '@/contexts/workspace-context';
@@ -31,12 +32,19 @@ const tenantSchema = z.object({
   deposit_amount: z.coerce.number().min(0).default(0).optional(),
 });
 type TenantForm = z.infer<typeof tenantSchema>;
-type TenantWithLot = Tenant & { lot?: Lot | null };
+type TenantWithLot = Tenant & {
+  lot?: Lot | null;
+  /** Informative label when the link comes from a document rather than a lease. */
+  lotFromDocument?: boolean;
+  documentCount?: number;
+};
 
 export function TenantsView() {
   const { t } = useLanguage();
   const { activeWorkspace } = useWorkspace();
   const supabase = createClient();
+  const searchParams = useSearchParams();
+  const editParam = searchParams.get('edit');
 
   const [tenants, setTenants] = useState<TenantWithLot[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
@@ -44,6 +52,9 @@ export function TenantsView() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAI, setShowAI] = useState(false);
+  const [editing, setEditing] = useState<Tenant | null>(null);
+  const [deleting, setDeleting] = useState<Tenant | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
 
   const form = useForm<TenantForm>({
     resolver: zodResolver(tenantSchema),
@@ -55,24 +66,47 @@ export function TenantsView() {
   useEffect(() => {
     if (!activeWorkspace) return;
     setLoading(true);
-    Promise.all([
-      supabase.from('tenants').select('*').eq('workspace_id', activeWorkspace.id).order('created_at', { ascending: false }),
-      supabase.from('lots').select('*').eq('workspace_id', activeWorkspace.id),
-      supabase.from('leases').select('tenant_id, lot_id, lots(*)').eq('workspace_id', activeWorkspace.id).eq('status', 'active'),
-    ]).then(([tenantsRes, lotsRes, leasesRes]) => {
-      const tenantLotMap = new Map(
-        (leasesRes.data ?? []).map(l => [
-          l.tenant_id,
-          Array.isArray(l.lots) ? (l.lots[0] as Lot ?? null) : (l.lots as Lot | null),
-        ])
-      );
-      setTenants(((tenantsRes.data ?? []) as Tenant[]).map(t => ({
-        ...t,
-        lot: tenantLotMap.get(t.id) ?? null,
-      })));
-      setLots((lotsRes.data ?? []) as Lot[]);
+    (async () => {
+      const [tenantsRes, lotsRes, leasesRes, docLinksRes] = await Promise.all([
+        supabase.from('tenants').select('*').eq('workspace_id', activeWorkspace.id).order('created_at', { ascending: false }),
+        supabase.from('lots').select('*').eq('workspace_id', activeWorkspace.id),
+        supabase.from('leases').select('tenant_id, lot_id, lots(*)').eq('workspace_id', activeWorkspace.id).eq('status', 'active'),
+        supabase.from('document_tenants').select('tenant_id, document:documents(id, status, doc_type, lot_id, created_at)').eq('workspace_id', activeWorkspace.id),
+      ]);
+      const lots = (lotsRes.data ?? []) as Lot[];
+      const lotsById = new Map(lots.map(l => [l.id, l]));
+
+      const leaseLotByTenant = new Map<string, Lot | null>();
+      for (const l of (leasesRes.data ?? [])) {
+        const lot = Array.isArray(l.lots) ? (l.lots[0] as Lot ?? null) : (l.lots as Lot | null);
+        leaseLotByTenant.set(l.tenant_id as string, lot);
+      }
+
+      const docInfoByTenant = new Map<string, { lot: Lot | null; count: number }>();
+      for (const row of (docLinksRes.data ?? [])) {
+        const doc = Array.isArray(row.document) ? row.document[0] : row.document;
+        if (!doc || doc.status !== 'confirmed') continue;
+        const tid = row.tenant_id as string;
+        const info = docInfoByTenant.get(tid) ?? { lot: null as Lot | null, count: 0 };
+        info.count += 1;
+        if (!info.lot && doc.lot_id) info.lot = lotsById.get(doc.lot_id) ?? null;
+        docInfoByTenant.set(tid, info);
+      }
+
+      setTenants(((tenantsRes.data ?? []) as Tenant[]).map(tenant => {
+        const leaseLot = leaseLotByTenant.get(tenant.id) ?? null;
+        const docInfo = docInfoByTenant.get(tenant.id);
+        if (leaseLot) {
+          return { ...tenant, lot: leaseLot, lotFromDocument: false, documentCount: docInfo?.count ?? 0 };
+        }
+        if (docInfo?.lot) {
+          return { ...tenant, lot: docInfo.lot, lotFromDocument: true, documentCount: docInfo.count };
+        }
+        return { ...tenant, lot: null, documentCount: docInfo?.count ?? 0 };
+      }));
+      setLots(lots);
       setLoading(false);
-    });
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
 
@@ -86,6 +120,28 @@ export function TenantsView() {
     }
   }, [selectedLotId, lots, form]);
 
+  const openEdit = (tenant: Tenant) => {
+    setEditing(tenant);
+    setShowAI(false);
+    form.reset({
+      first_name: tenant.first_name,
+      last_name: tenant.last_name,
+      email: tenant.email,
+      phone: tenant.phone ?? '',
+      with_lease: false,
+      charges_amount: 0,
+      deposit_amount: 0,
+    });
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!editParam || tenants.length === 0) return;
+    const target = tenants.find(tt => tt.id === editParam);
+    if (target) openEdit(target);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editParam, tenants.length]);
+
   const handleAIFill = (data: Record<string, unknown>) => {
     if (data.first_name) form.setValue('first_name', data.first_name as string);
     if (data.last_name) form.setValue('last_name', data.last_name as string);
@@ -97,6 +153,30 @@ export function TenantsView() {
   const onSubmit = async (values: TenantForm) => {
     if (!activeWorkspace) return;
     setSaving(true);
+
+    if (editing) {
+      const { data: updated } = await supabase
+        .from('tenants')
+        .update({
+          first_name: values.first_name,
+          last_name: values.last_name,
+          email: values.email,
+          phone: values.phone || null,
+        })
+        .eq('id', editing.id)
+        .select()
+        .single();
+      if (updated) {
+        setTenants(prev => prev.map(x => x.id === editing.id ? { ...x, ...(updated as Tenant) } : x));
+      }
+      setSaving(false);
+      setOpen(false);
+      setEditing(null);
+      setShowAI(false);
+      form.reset();
+      return;
+    }
+
     const { data: tenant } = await supabase
       .from('tenants')
       .insert({
@@ -131,7 +211,29 @@ export function TenantsView() {
     form.reset();
   };
 
-  const handleOpen = () => { setShowAI(false); form.reset(); setOpen(true); };
+  const handleOpen = () => {
+    setEditing(null);
+    setShowAI(false);
+    form.reset({ with_lease: false, charges_amount: 0, deposit_amount: 0 });
+    setOpen(true);
+  };
+
+  const handleDialogChange = (v: boolean) => {
+    setOpen(v);
+    if (!v) {
+      setShowAI(false);
+      setEditing(null);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeletingBusy(true);
+    const { error } = await supabase.from('tenants').delete().eq('id', deleting.id);
+    if (!error) setTenants(prev => prev.filter(x => x.id !== deleting.id));
+    setDeletingBusy(false);
+    setDeleting(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -155,36 +257,77 @@ export function TenantsView() {
         </div>
       ) : (
         <div className="rounded-lg border divide-y">
-          {tenants.map((tenant) => (
-            <div key={tenant.id} className="flex items-center gap-4 p-4">
-              <div className="flex size-9 items-center justify-center rounded-full bg-muted shrink-0 text-sm font-medium">
-                {tenant.first_name[0]}{tenant.last_name[0]}
+          {tenants.map((tenant) => {
+            const placeholder = tenant.email.endsWith('@placeholder.local');
+            return (
+              <div
+                key={tenant.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openEdit(tenant)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openEdit(tenant); } }}
+                className="flex items-center gap-4 p-4 cursor-pointer hover:bg-accent/40 transition-colors"
+              >
+                <div className="flex size-9 items-center justify-center rounded-full bg-muted shrink-0 text-sm font-medium">
+                  {tenant.first_name[0]}{tenant.last_name[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{tenant.first_name} {tenant.last_name}</p>
+                  <p className={`text-xs truncate ${placeholder ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                    {placeholder ? 'Email manquant — cliquer pour compléter' : tenant.email}
+                  </p>
+                </div>
+                {tenant.documentCount != null && tenant.documentCount > 0 && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                    <FileText className="size-3" />
+                    {tenant.documentCount}
+                  </span>
+                )}
+                {tenant.phone && (
+                  <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">{tenant.phone}</span>
+                )}
+                {tenant.lot ? (
+                  <span
+                    className={`text-xs truncate max-w-40 shrink-0 ${tenant.lotFromDocument ? 'text-violet-600' : 'text-muted-foreground'}`}
+                    title={tenant.lotFromDocument ? 'Via un document — pas de bail enregistré' : 'Bail actif'}
+                  >
+                    {tenant.lot.address}, {tenant.lot.city}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground shrink-0">Sans bail</span>
+                )}
+                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8"
+                    onClick={() => openEdit(tenant)}
+                    aria-label="Modifier"
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="size-8 text-destructive hover:text-destructive"
+                    onClick={() => setDeleting(tenant)}
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm">{tenant.first_name} {tenant.last_name}</p>
-                <p className="text-xs text-muted-foreground">{tenant.email}</p>
-              </div>
-              {tenant.phone && (
-                <span className="text-xs text-muted-foreground shrink-0">{tenant.phone}</span>
-              )}
-              {tenant.lot ? (
-                <span className="text-xs text-muted-foreground truncate max-w-40 shrink-0">
-                  {tenant.lot.address}, {tenant.lot.city}
-                </span>
-              ) : (
-                <span className="text-xs text-muted-foreground shrink-0">Sans bail</span>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setShowAI(false); }}>
+      <Dialog open={open} onOpenChange={handleDialogChange}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
-              {t.tenants.add}
-              {!showAI && (
+              {editing ? `Modifier ${editing.first_name} ${editing.last_name}` : t.tenants.add}
+              {!showAI && !editing && (
                 <button
                   type="button"
                   onClick={() => setShowAI(true)}
@@ -228,16 +371,18 @@ export function TenantsView() {
               <Input placeholder="06 12 34 56 78" {...form.register('phone')} />
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
-              <Checkbox
-                id="with_lease"
-                checked={withLease}
-                onCheckedChange={(v: boolean | 'indeterminate') => form.setValue('with_lease', v === true)}
-              />
-              <Label htmlFor="with_lease" className="cursor-pointer">{t.tenants.withLease}</Label>
-            </div>
+            {!editing && (
+              <div className="flex items-center gap-2 pt-2">
+                <Checkbox
+                  id="with_lease"
+                  checked={withLease}
+                  onCheckedChange={(v: boolean | 'indeterminate') => form.setValue('with_lease', v === true)}
+                />
+                <Label htmlFor="with_lease" className="cursor-pointer">{t.tenants.withLease}</Label>
+              </div>
+            )}
 
-            {withLease && (
+            {!editing && withLease && (
               <div className="space-y-3 pt-1 pl-6 border-l-2 border-muted">
                 <div className="space-y-2">
                   <Label>{t.tenants.property}</Label>
@@ -273,12 +418,31 @@ export function TenantsView() {
             )}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t.common.cancel}</Button>
+              <Button type="button" variant="outline" onClick={() => handleDialogChange(false)}>{t.common.cancel}</Button>
               <Button type="submit" disabled={saving}>
-                {saving ? t.common.loading : t.common.create}
+                {saving ? t.common.loading : (editing ? t.common.save : t.common.create)}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleting} onOpenChange={v => { if (!v) setDeleting(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Supprimer le locataire</DialogTitle>
+            <DialogDescription>
+              {deleting && `« ${deleting.first_name} ${deleting.last_name} » sera supprimé. Les baux et documents associés seront conservés mais dissociés.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)} disabled={deletingBusy}>
+              {t.common.cancel}
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete} disabled={deletingBusy}>
+              {deletingBusy ? t.common.loading : t.common.delete}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

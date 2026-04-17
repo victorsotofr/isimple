@@ -60,6 +60,28 @@ export const en: Translations = {
       rented: "Rented",
       vacant: "Vacant",
     },
+    detail: {
+      tabs: {
+        info: "Information",
+        tenants: "Tenants",
+        documents: "Documents",
+        tickets: "Tickets",
+        prestataires: "Contractors",
+      },
+      noTenants: "No tenants linked to this property.",
+      noDocuments: "No documents linked to this property.",
+      ticketsSoon: "Tickets related to this property will appear here.",
+      prestatairesSoon: "Contractors related to this property will appear here.",
+      deleteTitle: "Delete this property?",
+      deleteDescription: "This action cannot be undone. Linked leases and documents will remain but lose their association.",
+      notFound: "Property not found.",
+      lease: "Lease",
+      leaseStatus: {
+        active: "Active",
+        ended: "Ended",
+        pending: "Pending",
+      },
+    },
   },
   tenants: {
     title: "My tenants",

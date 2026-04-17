@@ -1,7 +1,7 @@
 export type {
   Database,
   Workspace, WorkspaceMember, WorkspaceInvitation,
-  Lot, Tenant, Lease, Conversation, Message, Document,
+  Lot, Tenant, Lease, Conversation, Message, Document, DocumentTenant,
   WorkspaceRole, InvitationStatus, LotType, LeaseStatus,
   ConversationCategory, ConversationStatus, MessageRole,
 } from './types';

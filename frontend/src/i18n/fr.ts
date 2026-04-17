@@ -58,6 +58,28 @@ export const fr = {
       rented: "Loué",
       vacant: "Vacant",
     },
+    detail: {
+      tabs: {
+        info: "Informations",
+        tenants: "Locataires",
+        documents: "Documents",
+        tickets: "Tickets",
+        prestataires: "Prestataires",
+      },
+      noTenants: "Aucun locataire associé à ce bien.",
+      noDocuments: "Aucun document lié à ce bien.",
+      ticketsSoon: "Les tickets liés à ce bien apparaîtront ici.",
+      prestatairesSoon: "Les prestataires liés à ce bien apparaîtront ici.",
+      deleteTitle: "Supprimer ce bien ?",
+      deleteDescription: "Cette action est irréversible. Les baux et documents liés ne seront pas supprimés mais perdront leur association.",
+      notFound: "Bien introuvable.",
+      lease: "Bail",
+      leaseStatus: {
+        active: "Actif",
+        ended: "Terminé",
+        pending: "En attente",
+      },
+    },
   },
   tenants: {
     title: "Mes locataires",
