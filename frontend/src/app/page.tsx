@@ -174,9 +174,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t px-5 py-14 lg:px-12">
+      <footer className="border-t px-5 py-[60px] lg:px-12">
         <div className="mx-auto max-w-6xl">
-          <div className="grid gap-10 pb-12 md:grid-cols-[2fr_1fr_1fr_1fr]">
+          <div className="grid gap-10 md:grid-cols-[2fr_1fr_1fr_1fr]">
             <div>
               <Link href="/" className="mb-3 flex items-center gap-2 text-foreground">
                 <span className="flex size-7 items-center justify-center rounded-md bg-foreground text-background">
@@ -215,9 +215,20 @@ export default function LandingPage() {
               ]}
             />
           </div>
-          <div className="flex flex-col gap-4 border-t pt-6 sm:flex-row sm:items-end sm:justify-between">
-            <span className="text-xs text-muted-foreground">isimple © 2026</span>
-            <div className="font-serif text-6xl leading-none tracking-[-0.05em] text-border sm:text-7xl">
+
+          <div className="mt-12 border-t pt-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-xs text-muted-foreground">isimple © 2026</span>
+              <div className="flex gap-5 text-xs text-muted-foreground">
+                <Link href="#" className="transition-colors hover:text-foreground">Terms</Link>
+                <Link href="#" className="transition-colors hover:text-foreground">Privacy</Link>
+                <Link href="#" className="transition-colors hover:text-foreground">Contact</Link>
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              className="mt-8 select-none font-serif text-[clamp(72px,18vw,210px)] leading-[0.75] tracking-[-0.065em] text-border"
+            >
               isimple
             </div>
           </div>
