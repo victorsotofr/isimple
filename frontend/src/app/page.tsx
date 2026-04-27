@@ -173,7 +173,78 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <footer className="border-t px-5 py-14 lg:px-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-10 pb-12 md:grid-cols-[2fr_1fr_1fr_1fr]">
+            <div>
+              <Link href="/" className="mb-3 flex items-center gap-2 text-foreground">
+                <span className="flex size-7 items-center justify-center rounded-md bg-foreground text-background">
+                  <LogoMark />
+                </span>
+                <span className="font-serif text-lg">isimple</span>
+              </Link>
+              <p className="max-w-64 text-sm leading-6 text-muted-foreground">
+                La gestion immobilière propulsée par l&apos;intelligence artificielle. Conçu pour les professionnels de l&apos;immobilier.
+              </p>
+            </div>
+            <FooterColumn
+              title="Produit"
+              links={[
+                ['Fonctionnalités', '#features'],
+                ['Méthode', '#workflow'],
+                ['Aperçu', '#preview'],
+                ['Connexion', '/login'],
+              ]}
+            />
+            <FooterColumn
+              title="Entreprise"
+              links={[
+                ['À propos', '#'],
+                ['Blog', '#'],
+                ['Carrières', '#'],
+                ['Contact', '#'],
+              ]}
+            />
+            <FooterColumn
+              title="Légal"
+              links={[
+                ['Confidentialité', '#'],
+                ['CGU', '#'],
+                ['RGPD', '#'],
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-4 border-t pt-6 sm:flex-row sm:items-end sm:justify-between">
+            <span className="text-xs text-muted-foreground">isimple © 2026</span>
+            <div className="font-serif text-6xl leading-none tracking-[-0.05em] text-border sm:text-7xl">
+              isimple
+            </div>
+          </div>
+        </div>
+      </footer>
     </main>
+  );
+}
+
+function FooterColumn({
+  title,
+  links,
+}: {
+  title: string;
+  links: readonly (readonly [string, string])[];
+}) {
+  return (
+    <div>
+      <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">{title}</h4>
+      <div className="grid gap-2.5">
+        {links.map(([label, href]) => (
+          <Link key={label} href={href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+            {label}
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
 
