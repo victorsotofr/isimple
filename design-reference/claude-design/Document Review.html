@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iSimple — Validation des documents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #faf9f7; --fg: #1c1c1a; --fg2: #5a5a55; --fg3: #9a9a92;
+    --accent: oklch(0.58 0.13 52); --accent-light: oklch(0.95 0.04 52);
+    --border: #e8e7e2; --serif: 'DM Serif Display', serif; --sans: 'DM Sans', sans-serif;
+  }
+  body { background: var(--bg); font-family: var(--sans); color: var(--fg); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+  #root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #e8e7e2; border-radius: 2px; }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+
+  .shimmer {
+    background: linear-gradient(90deg, #f0ede8 25%, #e8e4de 50%, #f0ede8 75%);
+    background-size: 400px 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── Mock Data ─────────────────────────────────────────────────────────────
+const MOCK_DOCS = [
+  {
+    id: 1, filename: 'Bail_Dubois_2024.pdf', type: 'Bail d\'habitation',
+    property: '12 rue Lepic, Paris 18', size: '2.4 MB', pages: 8,
+    status: 'review', // processing | review | confirmed | rejected
+    confidence: 0.97,
+    summary: 'Bail de résidence principale de 3 ans entre la SCI Les Lilas et M. Jean-Pierre Dubois. Loyer de 1 200 € charges comprises, dépôt de garantie de 2 400 €.',
+    fields: [
+      { key: 'locataire', label: 'Locataire', value: 'Jean-Pierre Dubois', confidence: 0.99, editable: true },
+      { key: 'loyer', label: 'Loyer mensuel', value: '1 200 €', confidence: 0.98, editable: true },
+      { key: 'charges', label: 'Charges', value: '80 € / mois', confidence: 0.95, editable: true },
+      { key: 'depot', label: 'Dépôt de garantie', value: '2 400 €', confidence: 0.99, editable: true },
+      { key: 'debut', label: 'Date de début', value: '1er mars 2024', confidence: 0.97, editable: true },
+      { key: 'duree', label: 'Durée du bail', value: '3 ans', confidence: 0.99, editable: true },
+      { key: 'bailleur', label: 'Bailleur', value: 'SCI Les Lilas', confidence: 0.96, editable: true },
+      { key: 'adresse', label: 'Adresse du bien', value: '12 rue Lepic, 75018 Paris', confidence: 0.99, editable: true },
+      { key: 'surface', label: 'Surface habitable', value: '48 m²', confidence: 0.94, editable: true },
+      { key: 'type', label: 'Type de logement', value: 'Appartement F2', confidence: 0.99, editable: true },
+    ]
+  },
+  {
+    id: 2, filename: 'EDL_Entrant_Martin.pdf', type: 'État des lieux entrant',
+    property: '3 av. Victor Hugo, Lyon', size: '5.1 MB', pages: 12,
+    status: 'processing',
+    confidence: null,
+    summary: null,
+    fields: []
+  },
+  {
+    id: 3, filename: 'Quittance_Laurent_Avr24.pdf', type: 'Quittance de loyer',
+    property: '7 rue du Faubourg, Bordeaux', size: '0.3 MB', pages: 1,
+    status: 'review',
+    confidence: 0.92,
+    summary: 'Quittance de loyer pour avril 2024. Locataire Mme Isabelle Laurent, loyer de 850 €.',
+    fields: [
+      { key: 'locataire', label: 'Locataire', value: 'Isabelle Laurent', confidence: 0.99, editable: true },
+      { key: 'loyer', label: 'Loyer', value: '850 €', confidence: 0.99, editable: true },
+      { key: 'periode', label: 'Période', value: 'Avril 2024', confidence: 0.99, editable: true },
+      { key: 'adresse', label: 'Adresse', value: '7 rue du Faubourg, 33000 Bordeaux', confidence: 0.97, editable: true },
+      { key: 'date_emission', label: 'Date d\'émission', value: '1er avril 2024', confidence: 0.95, editable: true },
+    ]
+  },
+  {
+    id: 4, filename: 'DPE_12RueLepic.pdf', type: 'Diagnostic DPE',
+    property: '12 rue Lepic, Paris 18', size: '1.8 MB', pages: 4,
+    status: 'confirmed',
+    confidence: 0.99,
+    summary: 'DPE valable jusqu\'en 2034. Classement énergétique D (196 kWh/m²/an). Émissions GES : classe E.',
+    fields: [
+      { key: 'classe', label: 'Classe énergétique', value: 'D', confidence: 0.99, editable: false },
+      { key: 'consommation', label: 'Consommation', value: '196 kWh/m²/an', confidence: 0.99, editable: false },
+      { key: 'ges', label: 'Classe GES', value: 'E', confidence: 0.99, editable: false },
+      { key: 'validite', label: 'Validité', value: 'Jusqu\'au 15 jan. 2034', confidence: 0.99, editable: false },
+    ]
+  },
+  {
+    id: 5, filename: 'Contrat_Prestataire_Plomberie.pdf', type: 'Contrat prestataire',
+    property: 'Tous biens', size: '0.8 MB', pages: 3,
+    status: 'review',
+    confidence: 0.88,
+    summary: 'Contrat d\'entretien annuel avec Plomberie Rapide SARL. Intervention sous 4h garantie, tarif forfaitaire de 120 € HT/intervention.',
+    fields: [
+      { key: 'prestataire', label: 'Prestataire', value: 'Plomberie Rapide SARL', confidence: 0.99, editable: true },
+      { key: 'tarif', label: 'Tarif intervention', value: '120 € HT', confidence: 0.93, editable: true },
+      { key: 'delai', label: 'Délai d\'intervention', value: '4h', confidence: 0.87, editable: true },
+      { key: 'debut', label: 'Début contrat', value: '1er janvier 2024', confidence: 0.95, editable: true },
+      { key: 'duree', label: 'Durée', value: '1 an renouvelable', confidence: 0.91, editable: true },
+    ]
+  },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+function ConfidencePill({ value }) {
+  const pct = Math.round(value * 100);
+  const color = pct >= 95 ? '#2e7d32' : pct >= 85 ? '#e65100' : '#c62828';
+  const bg = pct >= 95 ? '#e8f5e9' : pct >= 85 ? '#fff3e0' : '#ffebee';
+  return (
+    <span style={{ fontSize: 11, fontWeight: 500, color, background: bg, padding: '2px 7px', borderRadius: 100 }}>
+      {pct}%
+    </span>
+  );
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    processing: { label: 'Analyse…', color: '#5a5a55', bg: '#f0efe9' },
+    review: { label: 'À valider', color: 'oklch(0.42 0.11 52)', bg: 'oklch(0.95 0.04 52)' },
+    confirmed: { label: 'Confirmé', color: '#2e7d32', bg: '#e8f5e9' },
+    rejected: { label: 'Rejeté', color: '#c62828', bg: '#ffebee' },
+  };
+  const s = map[status] || map.review;
+  return <span style={{ fontSize: 11, fontWeight: 500, color: s.color, background: s.bg, padding: '3px 9px', borderRadius: 100 }}>{s.label}</span>;
+}
+
+// ─── Fake PDF Viewer ──────────────────────────────────────────────────────
+function FakePDF({ doc }) {
+  if (doc.status === 'processing') {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f4f0', flexDirection: 'column', gap: 16 }}>
+        <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid #e8e7e2', borderTopColor: '#1c1c1a', animation: 'spin 0.9s linear infinite' }} />
+        <div style={{ fontSize: 14, color: '#9a9a92' }}>Analyse en cours…</div>
+      </div>
+    );
+  }
+
+  // Fake document layout based on type
+  const lines = doc.type === 'Quittance de loyer' ? [
+    { w: 120, indent: 0, bold: true }, { w: 80, indent: 0 },
+    null,
+    { w: 200, indent: 0, bold: true, large: true },
+    null,
+    { w: 180, indent: 0 }, { w: 160, indent: 0 }, { w: 140, indent: 0 },
+    null,
+    { w: 220, indent: 0 }, { w: 200, indent: 0 }, { w: 180, indent: 0 },
+    null,
+    { w: 160, indent: 0, bold: true }, { w: 140, indent: 32 }, { w: 120, indent: 32 },
+    null,
+    { w: 100, indent: 0, italic: true },
+  ] : [
+    { w: 140, indent: 0, bold: true, large: true }, { w: 100, indent: 0 },
+    null,
+    { w: 220, indent: 0, bold: true }, { w: 200, indent: 0 }, { w: 180, indent: 0 },
+    null,
+    { w: 160, indent: 0, bold: true },
+    { w: 240, indent: 16 }, { w: 220, indent: 16 }, { w: 200, indent: 16 }, { w: 180, indent: 16 },
+    null,
+    { w: 160, indent: 0, bold: true },
+    { w: 200, indent: 16 }, { w: 180, indent: 16 }, { w: 160, indent: 16 },
+    null,
+    { w: 140, indent: 0, bold: true },
+    { w: 220, indent: 16 }, { w: 200, indent: 16 },
+    null,
+    { w: 160, indent: 0 }, { w: 140, indent: 0 }, { w: 120, indent: 0 },
+  ];
+
+  const highlights = [3, 7, 8, 13, 15];
+
+  return (
+    <div style={{ flex: 1, background: '#888', overflow: 'auto', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px' }}>
+      <div style={{ background: 'white', width: '100%', maxWidth: 520, minHeight: 680, padding: '48px 52px', boxShadow: '0 4px 32px rgba(0,0,0,0.25)', position: 'relative', animation: 'slideIn 0.3s ease' }}>
+        {/* Header logo placeholder */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+          <div>
+            <div style={{ width: 80, height: 12, background: '#e8e7e2', borderRadius: 2, marginBottom: 6 }} />
+            <div style={{ width: 120, height: 8, background: '#f0efe9', borderRadius: 2 }} />
+          </div>
+          <div style={{ width: 56, height: 40, background: '#f5f4f0', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="3" width="7" height="7" rx="1" fill="#1c1c1a"/>
+              <rect x="14" y="3" width="7" height="7" rx="1" fill="#1c1c1a" opacity="0.4"/>
+              <rect x="3" y="14" width="7" height="7" rx="1" fill="#1c1c1a" opacity="0.4"/>
+              <rect x="14" y="14" width="7" height="7" rx="1" fill="#1c1c1a"/>
+            </svg>
+          </div>
+        </div>
+        {lines.map((line, i) => {
+          if (!line) return <div key={i} style={{ height: 14 }} />;
+          const isHighlighted = highlights.includes(i);
+          return (
+            <div key={i} style={{ marginLeft: line.indent, marginBottom: line.large ? 10 : 5, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                height: line.large ? 14 : line.bold ? 10 : 8,
+                width: line.w,
+                background: isHighlighted ? 'oklch(0.92 0.06 52)' : line.bold ? '#d0cfc9' : '#e8e7e2',
+                borderRadius: 2,
+                outline: isHighlighted ? '1.5px solid oklch(0.78 0.1 52)' : 'none',
+                transition: 'all 0.3s',
+              }} />
+              {isHighlighted && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+                  <circle cx="6" cy="6" r="5.5" fill="oklch(0.58 0.13 52)" stroke="none"/>
+                  <path d="M3.5 6l1.5 1.5 3-3" stroke="white" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+          );
+        })}
+        {/* Page number */}
+        <div style={{ position: 'absolute', bottom: 20, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: '#c0bfba' }}>
+          Page 1 / {doc.pages}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Extraction Panel ─────────────────────────────────────────────────────
+function EditableField({ field, onEdit }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(field.value);
+  const inputRef = useRef();
+
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+
+  const commit = () => { onEdit(field.key, val); setEditing(false); };
+
+  return (
+    <div style={{ padding: '9px 0', borderBottom: '1px solid #f5f4f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, animation: 'slideIn 0.2s ease' }}>
+      <span style={{ fontSize: 12, color: '#9a9a92', flexShrink: 0, width: 110 }}>{field.label}</span>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setVal(field.value); setEditing(false); } }}
+            style={{ fontSize: 13, fontWeight: 500, border: '1px solid oklch(0.78 0.1 52)', borderRadius: 5, padding: '3px 7px', outline: 'none', width: 140, fontFamily: 'DM Sans, sans-serif', background: 'oklch(0.98 0.02 52)' }}
+          />
+        ) : (
+          <span style={{ fontSize: 13, fontWeight: 500, textAlign: 'right' }}>{field.value}</span>
+        )}
+        <ConfidencePill value={field.confidence} />
+        {field.editable && !editing && (
+          <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#c0bfba', borderRadius: 4, transition: 'color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#5a5a55'}
+            onMouseLeave={e => e.currentTarget.style.color = '#c0bfba'}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <path d="M9 2l2 2L4 11H2V9L9 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProcessingPanel({ doc }) {
+  const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState(0);
+  const stages = ['Lecture du document…', 'Identification des sections…', 'Extraction des données…', 'Vérification de la cohérence…'];
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setProgress(p => {
+        if (p >= 100) { clearInterval(t); return 100; }
+        return p + 1.2;
+      });
+    }, 60);
+    const s = setInterval(() => setStage(st => Math.min(st + 1, stages.length - 1)), 3000);
+    return () => { clearInterval(t); clearInterval(s); };
+  }, []);
+
+  return (
+    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ background: '#f5f4f0', borderRadius: 10, padding: 20, textAlign: 'center' }}>
+        <div style={{ width: 40, height: 40, border: '3px solid #e8e7e2', borderTopColor: '#1c1c1a', borderRadius: '50%', animation: 'spin 0.9s linear infinite', margin: '0 auto 12px' }} />
+        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Analyse IA en cours</div>
+        <div style={{ fontSize: 12, color: '#9a9a92', height: 20, transition: 'all 0.3s' }}>{stages[stage]}</div>
+        <div style={{ marginTop: 16, height: 4, background: '#e8e7e2', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ height: '100%', background: '#1c1c1a', borderRadius: 2, width: `${progress}%`, transition: 'width 0.1s' }} />
+        </div>
+        <div style={{ fontSize: 11, color: '#9a9a92', marginTop: 6 }}>{Math.min(Math.round(progress), 100)}%</div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9a9a92', marginBottom: 10 }}>Champs en attente</div>
+        {['Locataire', 'Loyer mensuel', 'Date de début', 'Durée du bail', 'Adresse'].map(f => (
+          <div key={f} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f5f4f0' }}>
+            <span style={{ fontSize: 12, color: '#9a9a92' }}>{f}</span>
+            <div className="shimmer" style={{ width: 80, height: 12, borderRadius: 3 }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewPanel({ doc, onConfirm, onReject, onEdit }) {
+  const [fields, setFields] = useState(doc.fields);
+  const [confirmAnim, setConfirmAnim] = useState(false);
+
+  const handleEdit = (key, val) => {
+    setFields(prev => prev.map(f => f.key === key ? { ...f, value: val } : f));
+    onEdit(doc.id, key, val);
+  };
+
+  const handleConfirm = () => {
+    setConfirmAnim(true);
+    setTimeout(() => { setConfirmAnim(false); onConfirm(doc.id); }, 600);
+  };
+
+  const lowConf = fields.filter(f => f.confidence < 0.9);
+
+  return (
+    <div style={{ padding: 20, overflow: 'auto', height: '100%' }}>
+      {/* Summary */}
+      {doc.summary && (
+        <div style={{ background: 'oklch(0.96 0.03 52)', border: '1px solid oklch(0.9 0.05 52)', borderRadius: 10, padding: 14, marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'oklch(0.5 0.1 52)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.5 3 3.5.5-2.5 2.5.5 3.5L6 9l-3 1.5.5-3.5L1 4.5 4.5 4z" fill="oklch(0.58 0.13 52)"/></svg>
+            Résumé IA
+          </div>
+          <p style={{ fontSize: 13, color: '#3a3a38', lineHeight: 1.6 }}>{doc.summary}</p>
+        </div>
+      )}
+
+      {/* Low confidence warning */}
+      {lowConf.length > 0 && (
+        <div style={{ background: '#fff8f0', border: '1px solid #ffe0b2', borderRadius: 8, padding: '10px 14px', marginBottom: 16, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, marginTop: 1 }}>
+            <path d="M7 1L13 12H1L7 1z" stroke="#e65100" strokeWidth="1.2" fill="none"/>
+            <path d="M7 5v3M7 9.5v.5" stroke="#e65100" strokeWidth="1.2" strokeLinecap="round"/>
+          </svg>
+          <span style={{ fontSize: 12, color: '#bf360c' }}>
+            {lowConf.length} champ{lowConf.length > 1 ? 's' : ''} avec confiance faible — vérifiez avant de confirmer.
+          </span>
+        </div>
+      )}
+
+      {/* Confidence score */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9a9a92' }}>Données extraites</div>
+        <div style={{ fontSize: 12, color: '#5a5a55' }}>
+          Confiance globale : <strong>{Math.round(doc.confidence * 100)}%</strong>
+        </div>
+      </div>
+
+      {/* Fields */}
+      <div style={{ marginBottom: 20 }}>
+        {fields.map(f => (
+          <EditableField key={f.key} field={f} onEdit={handleEdit} />
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: 8, position: 'sticky', bottom: 0, background: 'white', padding: '12px 0 4px', margin: '0 -20px', padding: '12px 20px 4px', borderTop: '1px solid #f5f4f0' }}>
+        <button
+          onClick={handleConfirm}
+          style={{ flex: 1, background: confirmAnim ? '#2e7d32' : '#1c1c1a', color: 'white', border: 'none', padding: '11px 16px', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', transition: 'background 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          {confirmAnim ? (
+            <><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3 3 6-6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> Confirmé !</>
+          ) : 'Confirmer'}
+        </button>
+        <button onClick={() => onReject(doc.id)} style={{ background: 'none', border: '1px solid #e8e7e2', color: '#5a5a55', padding: '11px 14px', borderRadius: 8, fontSize: 14, cursor: 'pointer', transition: 'border-color 0.15s' }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = '#c62828'}
+          onMouseLeave={e => e.currentTarget.style.borderColor = '#e8e7e2'}>
+          Rejeter
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmedPanel({ doc }) {
+  return (
+    <div style={{ padding: 20, textAlign: 'center' }}>
+      <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '20px auto 12px' }}>
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <path d="M4.5 11l4.5 4.5 9-9" stroke="#2e7d32" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6, color: '#2e7d32' }}>Document confirmé</div>
+      <div style={{ fontSize: 13, color: '#9a9a92', marginBottom: 20 }}>Les données ont été intégrées à votre portefeuille.</div>
+      {doc.fields.map(f => (
+        <div key={f.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f5f4f0', fontSize: 13 }}>
+          <span style={{ color: '#9a9a92' }}>{f.label}</span>
+          <span style={{ fontWeight: 500 }}>{f.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Upload Drop Zone ──────────────────────────────────────────────────────
+function UploadZone({ onUpload }) {
+  const [drag, setDrag] = useState(false);
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDrag(true); }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={e => { e.preventDefault(); setDrag(false); onUpload(); }}
+      onClick={onUpload}
+      style={{
+        border: `2px dashed ${drag ? 'oklch(0.58 0.13 52)' : '#e8e7e2'}`,
+        background: drag ? 'oklch(0.97 0.02 52)' : '#fefefe',
+        borderRadius: 10, padding: '28px 20px', textAlign: 'center', cursor: 'pointer',
+        transition: 'all 0.2s', margin: '12px 0',
+      }}>
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ margin: '0 auto 10px', display: 'block' }}>
+        <rect x="4" y="6" width="16" height="20" rx="2" stroke="#9a9a92" strokeWidth="1.5"/>
+        <path d="M10 12h8M10 16h8M10 20h5" stroke="#9a9a92" strokeWidth="1.2" strokeLinecap="round"/>
+        <circle cx="21" cy="21" r="5" fill="#faf9f7" stroke="#9a9a92" strokeWidth="1.5"/>
+        <path d="M21 18.5v5M18.5 21h5" stroke="#9a9a92" strokeWidth="1.2" strokeLinecap="round"/>
+      </svg>
+      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Déposer des fichiers ici</div>
+      <div style={{ fontSize: 12, color: '#9a9a92' }}>PDF, images — baux, EDL, quittances…</div>
+    </div>
+  );
+}
+
+// ─── Main App ──────────────────────────────────────────────────────────────
+function App() {
+  const [docs, setDocs] = useState(MOCK_DOCS);
+  const [selectedId, setSelectedId] = useState(1);
+  const [filter, setFilter] = useState('all');
+  const [uploading, setUploading] = useState(false);
+
+  const selected = docs.find(d => d.id === selectedId);
+
+  const confirm = (id) => {
+    setTimeout(() => setDocs(prev => prev.map(d => d.id === id ? { ...d, status: 'confirmed' } : d)), 600);
+  };
+  const reject = (id) => {
+    setDocs(prev => prev.map(d => d.id === id ? { ...d, status: 'rejected' } : d));
+  };
+  const editField = (docId, key, val) => {
+    setDocs(prev => prev.map(d => d.id === docId ? { ...d, fields: d.fields.map(f => f.key === key ? { ...f, value: val } : f) } : d));
+  };
+
+  const handleUpload = () => {
+    const newDoc = {
+      id: Date.now(), filename: `Nouveau_Document_${docs.length + 1}.pdf`,
+      type: 'Document', property: 'Non assigné', size: '1.2 MB', pages: 4,
+      status: 'processing', confidence: null, summary: null, fields: []
+    };
+    setDocs(prev => [newDoc, ...prev]);
+    setSelectedId(newDoc.id);
+    setTimeout(() => {
+      setDocs(prev => prev.map(d => d.id === newDoc.id ? {
+        ...d, status: 'review', confidence: 0.91, type: 'Bail d\'habitation',
+        summary: 'Document analysé avec succès. Vérifiez les données extraites ci-dessous.',
+        fields: [
+          { key: 'locataire', label: 'Locataire', value: 'Nouveau Locataire', confidence: 0.88, editable: true },
+          { key: 'loyer', label: 'Loyer mensuel', value: '900 €', confidence: 0.93, editable: true },
+          { key: 'debut', label: 'Date de début', value: '1er mai 2024', confidence: 0.91, editable: true },
+        ]
+      } : d));
+    }, 5000);
+  };
+
+  const filtered = filter === 'all' ? docs : docs.filter(d => d.status === filter);
+  const reviewCount = docs.filter(d => d.status === 'review').length;
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Top bar */}
+      <div style={{ height: 52, borderBottom: '1px solid #e8e7e2', display: 'flex', alignItems: 'center', padding: '0 20px', gap: 16, background: 'white', flexShrink: 0 }}>
+        <a href="Landing Page.html" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: '#1c1c1a' }}>
+          <div style={{ width: 28, height: 28, background: '#1c1c1a', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+              <rect x="2" y="2" width="6" height="6" rx="1" fill="white"/>
+              <rect x="10" y="2" width="6" height="6" rx="1" fill="white" opacity="0.5"/>
+              <rect x="2" y="10" width="6" height="6" rx="1" fill="white" opacity="0.5"/>
+              <rect x="10" y="10" width="6" height="6" rx="1" fill="white"/>
+            </svg>
+          </div>
+          <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: 16 }}>isimple</span>
+        </a>
+        <span style={{ color: '#e8e7e2' }}>›</span>
+        <span style={{ fontSize: 13, color: '#9a9a92' }}>Documents</span>
+        <span style={{ color: '#e8e7e2' }}>›</span>
+        <span style={{ fontSize: 13, fontWeight: 500 }}>Validation</span>
+        {reviewCount > 0 && (
+          <span style={{ background: 'oklch(0.58 0.13 52)', color: 'white', borderRadius: 100, fontSize: 11, fontWeight: 600, padding: '2px 8px' }}>{reviewCount}</span>
+        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <a href="Onboarding.html" style={{ fontSize: 13, color: '#9a9a92', textDecoration: 'none' }}>← Onboarding</a>
+          <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#1c1c1a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11, fontWeight: 600 }}>JD</div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* Left: Document list */}
+        <div style={{ width: 280, borderRight: '1px solid #e8e7e2', background: 'white', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid #f5f4f0' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Documents</div>
+            {/* Filter tabs */}
+            <div style={{ display: 'flex', gap: 4, background: '#f5f4f0', borderRadius: 8, padding: 3 }}>
+              {[['all', 'Tous'], ['review', 'À valider'], ['confirmed', 'Confirmés']].map(([val, lab]) => (
+                <button key={val} onClick={() => setFilter(val)} style={{ flex: 1, padding: '5px 4px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500, background: filter === val ? 'white' : 'transparent', color: filter === val ? '#1c1c1a' : '#9a9a92', boxShadow: filter === val ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
+                  {lab}
+                  {val === 'review' && reviewCount > 0 && <span style={{ marginLeft: 4, background: 'oklch(0.58 0.13 52)', color: 'white', borderRadius: 100, fontSize: 9, padding: '1px 5px' }}>{reviewCount}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <UploadZone onUpload={handleUpload} />
+            <div style={{ padding: '0 8px' }}>
+              {filtered.map(doc => (
+                <div key={doc.id}
+                  onClick={() => setSelectedId(doc.id)}
+                  style={{
+                    padding: '10px 10px', borderRadius: 8, cursor: 'pointer', marginBottom: 2,
+                    background: selectedId === doc.id ? 'oklch(0.95 0.04 52)' : 'transparent',
+                    border: selectedId === doc.id ? '1px solid oklch(0.88 0.06 52)' : '1px solid transparent',
+                    transition: 'all 0.15s',
+                  }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ width: 28, height: 36, background: doc.status === 'confirmed' ? '#e8f5e9' : doc.status === 'processing' ? '#f5f4f0' : 'oklch(0.93 0.05 52)', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                      {doc.status === 'processing' ? (
+                        <div style={{ width: 10, height: 10, border: '1.5px solid #9a9a92', borderTopColor: '#1c1c1a', borderRadius: '50%', animation: 'spin 0.9s linear infinite' }} />
+                      ) : (
+                        <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
+                          <rect x="1" y="1" width="8" height="12" rx="1" stroke={doc.status === 'confirmed' ? '#2e7d32' : 'oklch(0.58 0.13 52)'} strokeWidth="1.2"/>
+                          <path d="M3 4h5M3 6.5h5M3 9h3" stroke={doc.status === 'confirmed' ? '#2e7d32' : 'oklch(0.58 0.13 52)'} strokeWidth="1" strokeLinecap="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.filename}</div>
+                      <div style={{ fontSize: 11, color: '#9a9a92', marginBottom: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.type}</div>
+                      <StatusBadge status={doc.status} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Center: PDF viewer */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {selected ? (
+            <>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e7e2', background: 'white', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                <svg width="14" height="16" viewBox="0 0 14 16" fill="none"><rect x="1" y="1" width="10" height="14" rx="1.5" stroke="#9a9a92" strokeWidth="1.2"/><path d="M3 5h6M3 8h6M3 11h3" stroke="#9a9a92" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>{selected.filename}</span>
+                <span style={{ fontSize: 12, color: '#9a9a92' }}>{selected.size} · {selected.pages} page{selected.pages > 1 ? 's' : ''}</span>
+                <div style={{ marginLeft: 'auto' }}>
+                  <StatusBadge status={selected.status} />
+                </div>
+              </div>
+              <FakePDF doc={selected} />
+            </>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9a9a92', fontSize: 14 }}>
+              Sélectionnez un document
+            </div>
+          )}
+        </div>
+
+        {/* Right: Extraction panel */}
+        <div style={{ width: 320, borderLeft: '1px solid #e8e7e2', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #f5f4f0', flexShrink: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Données extraites</div>
+            {selected?.property && <div style={{ fontSize: 12, color: '#9a9a92', marginTop: 2 }}>{selected.property}</div>}
+          </div>
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            {selected?.status === 'processing' && <ProcessingPanel doc={selected} />}
+            {selected?.status === 'review' && <ReviewPanel doc={selected} onConfirm={confirm} onReject={reject} onEdit={editField} />}
+            {selected?.status === 'confirmed' && <ConfirmedPanel doc={selected} />}
+            {selected?.status === 'rejected' && (
+              <div style={{ padding: 20, textAlign: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffebee', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '20px auto 12px' }}>
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M6 6l10 10M16 6L6 16" stroke="#c62828" strokeWidth="2" strokeLinecap="round"/></svg>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#c62828', marginBottom: 6 }}>Document rejeté</div>
+                <div style={{ fontSize: 13, color: '#9a9a92', marginBottom: 20 }}>Ce document ne sera pas intégré au portefeuille.</div>
+                <button onClick={() => setDocs(prev => prev.map(d => d.id === selected.id ? { ...d, status: 'review' } : d))} style={{ background: 'none', border: '1px solid #e8e7e2', color: '#5a5a55', padding: '10px 18px', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Reconsidérer</button>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

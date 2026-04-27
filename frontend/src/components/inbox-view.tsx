@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Send, Sparkles, MessageSquare } from 'lucide-react';
+import { Bot, CircleDot, Mail, MessageCircle, MessageSquare, Plus, Send, Sparkles, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,12 +18,18 @@ import type { Conversation, Message, Tenant } from '@/db';
 type ConversationWithTenant = Conversation & { tenants: Pick<Tenant, 'first_name' | 'last_name'> | null };
 
 const CATEGORY_COLORS: Record<Conversation['category'], string> = {
-  maintenance: 'bg-orange-100 text-orange-700',
-  paiement: 'bg-blue-100 text-blue-700',
-  réclamation: 'bg-red-100 text-red-700',
-  document: 'bg-purple-100 text-purple-700',
-  information: 'bg-gray-100 text-gray-700',
-  autre: 'bg-gray-100 text-gray-600',
+  maintenance: 'bg-orange-100 text-orange-700 border-orange-200',
+  paiement: 'bg-blue-100 text-blue-700 border-blue-200',
+  réclamation: 'bg-red-100 text-red-700 border-red-200',
+  document: 'bg-brand-muted text-brand border-brand/20',
+  information: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  autre: 'bg-muted text-muted-foreground border-border',
+};
+
+const STATUS_STYLES: Record<Conversation['status'], { label: string; dot: string }> = {
+  open: { label: 'À traiter', dot: 'bg-orange-500' },
+  pending: { label: 'En attente', dot: 'bg-brand' },
+  closed: { label: 'Résolu', dot: 'bg-muted-foreground' },
 };
 
 function fmtTime(iso: string) {
@@ -222,126 +228,199 @@ export function InboxView() {
   const tenantName = (c: ConversationWithTenant) =>
     c.tenants ? `${c.tenants.first_name} ${c.tenants.last_name}` : 'Inconnu';
 
+  const groupedConversations = (['open', 'pending', 'closed'] as Conversation['status'][]).map(status => ({
+    status,
+    items: conversations.filter(c => c.status === status),
+  })).filter(group => group.items.length > 0);
+
   return (
-    <div className="flex h-[calc(100vh-7rem)] border rounded-lg overflow-hidden">
-      {/* Conversations list */}
-      <div className="w-72 shrink-0 flex flex-col border-r">
-        <div className="flex items-center justify-between px-3 py-2 border-b">
-          <span className="text-sm font-medium">{t.inbox.title}</span>
-          <Button size="icon" variant="ghost" className="size-7" onClick={() => setNewConvOpen(true)}>
+    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[560px] overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="flex w-[310px] shrink-0 flex-col border-r bg-card">
+        <div className="flex items-center justify-between border-b px-3 py-2.5">
+          <div>
+            <p className="text-sm font-semibold">{t.inbox.title}</p>
+            <p className="text-[11px] text-muted-foreground">Tri IA et suivi locataire</p>
+          </div>
+          <Button size="icon" variant="ghost" className="size-8 rounded-lg" onClick={() => setNewConvOpen(true)}>
             <Plus className="size-4" />
           </Button>
         </div>
+
+        <div className="flex gap-1 border-b px-3 py-2">
+          {['Tous', 'Email', 'Chat'].map((filter, idx) => (
+            <button
+              key={filter}
+              type="button"
+              className={cn(
+                'rounded-full border px-2.5 py-1 text-[11px] transition-colors',
+                idx === 0 ? 'border-foreground bg-foreground text-background' : 'border-border text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {filter}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground p-4 text-center">
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
               <MessageSquare className="size-8 opacity-30" />
               <p className="text-xs">{t.inbox.emptyList}</p>
             </div>
-          ) : conversations.map(c => (
-            <button
-              key={c.id}
-              onClick={() => setSelected(c)}
-              className={cn(
-                'w-full text-left px-3 py-3 border-b hover:bg-muted/50 transition-colors',
-                selected?.id === c.id && 'bg-muted'
-              )}
-            >
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="text-sm font-medium truncate">{tenantName(c)}</span>
-                <span className="text-[10px] text-muted-foreground shrink-0">{fmtTime(c.last_message_at)}</span>
+          ) : groupedConversations.map(group => (
+            <div key={group.status}>
+              <div className="flex items-center gap-2 px-4 pb-1 pt-3">
+                <span className={cn('size-1.5 rounded-full', STATUS_STYLES[group.status].dot)} />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  {STATUS_STYLES[group.status].label}
+                </span>
+                <span className="text-[10px] text-muted-foreground">{group.items.length}</span>
               </div>
-              <p className="text-xs text-muted-foreground truncate mb-1.5">{c.subject}</p>
-              <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium', CATEGORY_COLORS[c.category])}>
-                {t.inbox.categories[c.category as keyof typeof t.inbox.categories]}
-              </span>
-            </button>
+              {group.items.map(c => {
+                const active = selected?.id === c.id;
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelected(c)}
+                    className={cn(
+                      'w-full border-l-2 border-transparent px-4 py-3 text-left transition-colors hover:bg-background',
+                      active && 'border-brand bg-brand-muted'
+                    )}
+                  >
+                    <div className="mb-1 flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full border bg-background text-[11px] font-semibold">
+                          {tenantName(c).slice(0, 1)}
+                        </span>
+                        <span className="truncate text-[13px] font-semibold">{tenantName(c)}</span>
+                      </div>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{fmtTime(c.last_message_at)}</span>
+                    </div>
+                    <div className="ml-9 flex items-center justify-between gap-2">
+                      <p className="truncate text-xs text-muted-foreground">{c.subject}</p>
+                      <MessageCircle className="size-3 shrink-0 text-brand" />
+                    </div>
+                    <div className="ml-9 mt-2 flex items-center gap-1.5">
+                      <span className={cn('rounded-full border px-1.5 py-0.5 text-[10px] font-medium', CATEGORY_COLORS[c.category])}>
+                        {t.inbox.categories[c.category as keyof typeof t.inbox.categories]}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Thread view */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col bg-background">
         {!selected ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
-            <MessageSquare className="size-8 opacity-30" />
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+            <div className="flex size-12 items-center justify-center rounded-2xl border bg-card">
+              <MessageSquare className="size-6 opacity-40" />
+            </div>
             <p className="text-sm">{t.inbox.emptyThread}</p>
           </div>
         ) : (
           <>
-            {/* Thread header */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
-              <div>
-                <p className="text-sm font-medium">{tenantName(selected)}</p>
-                <p className="text-xs text-muted-foreground">{selected.subject}</p>
-              </div>
-              <Badge className={cn('ml-auto text-[10px]', CATEGORY_COLORS[selected.category])}>
-                {t.inbox.categories[selected.category as keyof typeof t.inbox.categories]}
-              </Badge>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.map(msg => (
-                <div
-                  key={msg.id}
-                  className={cn('flex', msg.role === 'manager' ? 'justify-end' : 'justify-start')}
-                >
-                  <div className={cn(
-                    'max-w-[70%] rounded-2xl px-4 py-2.5 text-sm',
-                    msg.role === 'manager' && 'bg-primary text-primary-foreground rounded-br-sm',
-                    msg.role === 'tenant' && 'bg-muted rounded-bl-sm',
-                    msg.role === 'ai' && 'bg-violet-50 border border-violet-200 text-violet-900 rounded-bl-sm',
-                  )}>
-                    {msg.role === 'ai' && (
-                      <div className="flex items-center gap-1 text-[10px] text-violet-500 mb-1">
-                        <Sparkles className="size-3" />IA
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                    <p className={cn(
-                      'text-[10px] mt-1',
-                      msg.role === 'manager' ? 'text-primary-foreground/60 text-right' : 'text-muted-foreground',
-                    )}>
-                      {fmtTime(msg.created_at)}
-                    </p>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-card px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-full border bg-background text-sm font-semibold">
+                  {tenantName(selected).slice(0, 1)}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{tenantName(selected)}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Mail className="size-3 text-muted-foreground" />
+                    <p className="truncate text-xs text-muted-foreground">{selected.subject}</p>
                   </div>
                 </div>
-              ))}
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge className={cn('border text-[10px]', CATEGORY_COLORS[selected.category])}>
+                  {t.inbox.categories[selected.category as keyof typeof t.inbox.categories]}
+                </Badge>
+                <div className="hidden items-center gap-1.5 rounded-full border bg-brand-muted px-2 py-1 text-[11px] font-medium text-brand sm:flex">
+                  <Bot className="size-3" />
+                  IA prête
+                </div>
+              </div>
+            </div>
+
+            {selected.status === 'pending' && (
+              <div className="flex items-center gap-2 border-b bg-brand-muted px-4 py-2 text-xs text-muted-foreground">
+                <Bot className="size-3.5 text-brand" />
+                L&apos;IA suit cette conversation. Générez un brouillon ou répondez manuellement.
+              </div>
+            )}
+
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+              {messages.map(msg => {
+                const isManager = msg.role === 'manager';
+                const isAi = msg.role === 'ai';
+                return (
+                  <div
+                    key={msg.id}
+                    className={cn('flex animate-isimple-slide-in', isManager || isAi ? 'justify-end' : 'justify-start')}
+                  >
+                    <div className={cn('flex max-w-[78%] flex-col', isManager || isAi ? 'items-end' : 'items-start')}>
+                      <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        {isAi ? <Bot className="size-3 text-brand" /> : isManager ? <UserRound className="size-3" /> : <MessageCircle className="size-3" />}
+                        <span>{isAi ? 'Agent IA' : isManager ? t.inbox.manager : t.inbox.tenant}</span>
+                        <span>·</span>
+                        <span>{fmtTime(msg.created_at)}</span>
+                      </div>
+                      <div className={cn(
+                        'rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
+                        isManager && 'rounded-br-sm border-brand/30 bg-brand text-brand-foreground',
+                        msg.role === 'tenant' && 'rounded-bl-sm border-border bg-card',
+                        isAi && 'rounded-br-sm border-brand/20 bg-brand-muted text-foreground',
+                      )}>
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               <div ref={bottomRef} />
             </div>
 
-            {/* Compose */}
-            <div className="border-t p-3 space-y-2 shrink-0">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="shrink-0 border-t bg-card p-3">
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{t.inbox.sendAs} :</span>
                 <button
+                  type="button"
                   onClick={() => setSendRole('manager')}
-                  className={cn('px-2 py-0.5 rounded-full', sendRole === 'manager' ? 'bg-primary text-primary-foreground' : 'bg-muted')}
+                  className={cn('rounded-full px-2 py-1 transition-colors', sendRole === 'manager' ? 'bg-foreground text-background' : 'bg-muted hover:text-foreground')}
                 >
                   {t.inbox.manager}
                 </button>
                 <button
+                  type="button"
                   onClick={() => setSendRole('tenant')}
-                  className={cn('px-2 py-0.5 rounded-full', sendRole === 'tenant' ? 'bg-primary text-primary-foreground' : 'bg-muted')}
+                  className={cn('rounded-full px-2 py-1 transition-colors', sendRole === 'tenant' ? 'bg-foreground text-background' : 'bg-muted hover:text-foreground')}
                 >
                   {t.inbox.tenant}
                 </button>
+                <span className="ml-auto hidden items-center gap-1 text-[11px] sm:flex">
+                  <CircleDot className="size-3 text-emerald-500" />
+                  Entrée pour envoyer
+                </span>
               </div>
               <div className="flex gap-2">
                 <textarea
                   value={compose}
                   onChange={e => setCompose(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  placeholder="Écrire un message... (Entrée pour envoyer)"
-                  className="flex-1 min-h-[72px] resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Répondre ou demander un brouillon IA..."
+                  className="min-h-[72px] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none"
                 />
                 <div className="flex flex-col gap-2">
-                  <Button size="sm" variant="outline" onClick={handleAiDraft} disabled={drafting} className="gap-1.5 h-8">
-                    <Sparkles className="size-3.5" />
+                  <Button size="sm" variant="outline" onClick={handleAiDraft} disabled={drafting} className="h-8 gap-1.5">
+                    <Sparkles className="size-3.5 text-brand" />
                     {drafting ? t.inbox.generating : t.inbox.aiDraft}
                   </Button>
-                  <Button size="sm" onClick={handleSend} disabled={sending || !compose.trim()} className="gap-1.5 h-8">
+                  <Button size="sm" onClick={handleSend} disabled={sending || !compose.trim()} className="h-8 gap-1.5 bg-brand text-brand-foreground hover:bg-brand/90">
                     <Send className="size-3.5" />
                     {t.common.send}
                   </Button>

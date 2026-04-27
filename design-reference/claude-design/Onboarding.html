@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iSimple — Créer un compte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #faf9f7; --fg: #1c1c1a; --fg2: #5a5a55; --fg3: #9a9a92;
+    --accent: oklch(0.58 0.13 52); --accent-light: oklch(0.95 0.04 52);
+    --border: #e8e7e2; --serif: 'DM Serif Display', Georgia, serif; --sans: 'DM Sans', sans-serif;
+  }
+  body { background: var(--bg); font-family: var(--sans); color: var(--fg); min-height: 100vh; display: flex; flex-direction: column; }
+  #root { flex: 1; display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const STEPS = [
+  { id: 'account', label: 'Compte' },
+  { id: 'agency', label: 'Agence' },
+  { id: 'property', label: 'Propriété' },
+  { id: 'team', label: 'Équipe' },
+  { id: 'done', label: 'Prêt !' },
+];
+
+const onboardingStyles = {
+  layout: { display: 'flex', minHeight: '100vh' },
+  sidebar: {
+    width: 320, background: '#1c1c1a', color: '#f0efe9',
+    padding: '40px 36px', display: 'flex', flexDirection: 'column',
+    position: 'sticky', top: 0, height: '100vh', flexShrink: 0,
+  },
+  sidebarLogo: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 64, textDecoration: 'none', color: '#f0efe9' },
+  logoMark: { width: 32, height: 32, background: '#f0efe9', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  logoText: { fontFamily: 'DM Serif Display, Georgia, serif', fontSize: 20 },
+  stepList: { listStyle: 'none', flex: 1 },
+  stepItem: (active, done) => ({
+    display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0',
+    opacity: done ? 0.5 : active ? 1 : 0.35,
+    transition: 'opacity 0.3s',
+  }),
+  stepCircle: (active, done) => ({
+    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: done ? '#f0efe9' : active ? 'oklch(0.58 0.13 52)' : 'transparent',
+    border: done ? 'none' : active ? 'none' : '1px solid rgba(240,239,233,0.25)',
+    color: done ? '#1c1c1a' : '#f0efe9',
+    fontSize: 12, fontWeight: 600, transition: 'all 0.3s',
+  }),
+  stepLabel: (active) => ({ fontSize: 14, fontWeight: active ? 500 : 400 }),
+  stepLine: { width: 1, height: 20, background: 'rgba(240,239,233,0.12)', margin: '0 0 0 13px' },
+  main: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 48px' },
+  card: { width: '100%', maxWidth: 480 },
+  eyebrow: { fontSize: 12, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'oklch(0.58 0.13 52)', marginBottom: 12 },
+  h1: { fontFamily: 'DM Serif Display, Georgia, serif', fontSize: 36, lineHeight: 1.1, letterSpacing: '-0.02em', marginBottom: 8 },
+  sub: { fontSize: 15, color: '#5a5a55', marginBottom: 36, lineHeight: 1.6 },
+  label: { display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#3a3a38' },
+  input: {
+    width: '100%', padding: '11px 14px', border: '1px solid #e8e7e2', borderRadius: 8,
+    fontFamily: 'DM Sans, sans-serif', fontSize: 15, color: '#1c1c1a', background: 'white',
+    outline: 'none', transition: 'border-color 0.15s', marginBottom: 16,
+  },
+  inputFocus: { borderColor: 'oklch(0.58 0.13 52)' },
+  row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
+  btnPrimary: {
+    width: '100%', background: '#1c1c1a', color: '#faf9f7', border: 'none',
+    padding: '14px 24px', borderRadius: 8, fontFamily: 'DM Sans, sans-serif',
+    fontSize: 15, fontWeight: 500, cursor: 'pointer', marginTop: 8,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    transition: 'opacity 0.15s',
+  },
+  btnSecondary: {
+    background: 'none', border: '1px solid #e8e7e2', color: '#1c1c1a',
+    padding: '11px 20px', borderRadius: 8, fontFamily: 'DM Sans, sans-serif',
+    fontSize: 14, cursor: 'pointer', marginTop: 8, transition: 'border-color 0.15s',
+  },
+  fieldGroup: { marginBottom: 4 },
+  hint: { fontSize: 12, color: '#9a9a92', marginBottom: 20, marginTop: -10 },
+  divider: { height: 1, background: '#e8e7e2', margin: '24px 0' },
+  socialBtn: {
+    width: '100%', background: 'white', border: '1px solid #e8e7e2', color: '#1c1c1a',
+    padding: '12px 20px', borderRadius: 8, fontFamily: 'DM Sans, sans-serif',
+    fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    gap: 10, marginBottom: 10,
+  },
+  optionCard: (sel) => ({
+    border: sel ? '2px solid oklch(0.58 0.13 52)' : '1px solid #e8e7e2',
+    borderRadius: 10, padding: '16px 18px', cursor: 'pointer', marginBottom: 10,
+    display: 'flex', alignItems: 'center', gap: 14, background: sel ? 'oklch(0.95 0.04 52)' : 'white',
+    transition: 'all 0.15s',
+  }),
+  teamRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 },
+  chip: {
+    display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f0efe9', border: '1px solid #e8e7e2',
+    borderRadius: 100, padding: '4px 12px 4px 8px', fontSize: 13,
+  },
+  avatar: { width: 24, height: 24, borderRadius: '50%', background: '#e8e7e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#5a5a55' },
+  doneIcon: { width: 64, height: 64, borderRadius: '50%', background: '#1c1c1a', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+};
+
+function LogoMark({ size = 32, dark = false }) {
+  return (
+    <div style={{ width: size, height: size, background: dark ? '#f0efe9' : '#1c1c1a', borderRadius: size * 0.25, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 18 18" fill="none">
+        <rect x="2" y="2" width="6" height="6" rx="1" fill={dark ? '#1c1c1a' : 'white'} />
+        <rect x="10" y="2" width="6" height="6" rx="1" fill={dark ? '#1c1c1a' : 'white'} opacity="0.5" />
+        <rect x="2" y="10" width="6" height="6" rx="1" fill={dark ? '#1c1c1a' : 'white'} opacity="0.5" />
+        <rect x="10" y="10" width="6" height="6" rx="1" fill={dark ? '#1c1c1a' : 'white'} />
+      </svg>
+    </div>
+  );
+}
+
+function FocusInput({ label, placeholder, type = 'text', value, onChange, hint }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={onboardingStyles.fieldGroup}>
+      <label style={onboardingStyles.label}>{label}</label>
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{ ...onboardingStyles.input, ...(focused ? onboardingStyles.inputFocus : {}) }}
+      />
+      {hint && <div style={onboardingStyles.hint}>{hint}</div>}
+    </div>
+  );
+}
+
+function StepAccount({ onNext }) {
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [name, setName] = useState('');
+  return (
+    <div style={onboardingStyles.card}>
+      <div style={onboardingStyles.eyebrow}>Étape 1 / 4</div>
+      <h1 style={onboardingStyles.h1}>Créez votre compte</h1>
+      <p style={onboardingStyles.sub}>Commencez gratuitement, sans carte bancaire.</p>
+
+      <button style={onboardingStyles.socialBtn}>
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.707A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.707V4.961H.957A9.006 9.006 0 000 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.961L3.964 6.293C4.672 4.166 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+        Continuer avec Google
+      </button>
+
+      <div style={{ textAlign: 'center', margin: '4px 0 16px', fontSize: 12, color: '#9a9a92' }}>ou</div>
+
+      <FocusInput label="Nom complet" placeholder="Jean Dupont" value={name} onChange={setName} />
+      <FocusInput label="Adresse email" placeholder="jean@agence.fr" type="email" value={email} onChange={setEmail} />
+      <FocusInput label="Mot de passe" placeholder="8 caractères minimum" type="password" value={pass} onChange={setPass} hint="Incluez chiffres et majuscules pour plus de sécurité" />
+
+      <button style={onboardingStyles.btnPrimary} onClick={onNext}>
+        Créer mon compte →
+      </button>
+      <p style={{ textAlign: 'center', marginTop: 16, fontSize: 13, color: '#9a9a92' }}>
+        Déjà un compte ? <a href="Landing Page.html" style={{ color: '#1c1c1a', fontWeight: 500 }}>Se connecter</a>
+      </p>
+      <p style={{ textAlign: 'center', marginTop: 8, fontSize: 12, color: '#b0b0a8' }}>
+        En continuant, vous acceptez nos <a href="#" style={{ color: '#9a9a92' }}>CGU</a> et <a href="#" style={{ color: '#9a9a92' }}>Politique de confidentialité</a>
+      </p>
+    </div>
+  );
+}
+
+function StepAgency({ onNext, onBack }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('');
+  const [size, setSize] = useState('');
+  const types = [
+    { id: 'agency', label: 'Agence immobilière', desc: 'Gestion pour compte de tiers' },
+    { id: 'owner', label: 'Propriétaire bailleur', desc: 'Gestion de mon propre patrimoine' },
+    { id: 'syndic', label: 'Syndic de copropriété', desc: 'Gestion de charges et parties communes' },
+  ];
+  const sizes = ['1–5 biens', '6–20 biens', '21–100 biens', '100+ biens'];
+  return (
+    <div style={onboardingStyles.card}>
+      <div style={onboardingStyles.eyebrow}>Étape 2 / 4</div>
+      <h1 style={onboardingStyles.h1}>Votre agence</h1>
+      <p style={onboardingStyles.sub}>Ces informations personnalisent votre expérience iSimple.</p>
+
+      <FocusInput label="Nom de votre agence ou structure" placeholder="Immobilier Dupont" value={name} onChange={setName} />
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={onboardingStyles.label}>Vous êtes…</label>
+        {types.map(t => (
+          <div key={t.id} style={onboardingStyles.optionCard(type === t.id)} onClick={() => setType(t.id)}>
+            <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${type === t.id ? 'oklch(0.58 0.13 52)' : '#e8e7e2'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {type === t.id && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'oklch(0.58 0.13 52)' }} />}
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>{t.label}</div>
+              <div style={{ fontSize: 12, color: '#9a9a92' }}>{t.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <label style={onboardingStyles.label}>Taille de votre portefeuille</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {sizes.map(s => (
+            <button key={s} onClick={() => setSize(s)} style={{ padding: '8px 14px', borderRadius: 100, border: `1px solid ${size === s ? 'oklch(0.58 0.13 52)' : '#e8e7e2'}`, background: size === s ? 'oklch(0.95 0.04 52)' : 'white', color: size === s ? 'oklch(0.4 0.1 52)' : '#5a5a55', fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button style={onboardingStyles.btnPrimary} onClick={onNext}>Continuer →</button>
+      <button style={{ ...onboardingStyles.btnSecondary, width: '100%', marginTop: 8, textAlign: 'center' }} onClick={onBack}>← Retour</button>
+    </div>
+  );
+}
+
+function StepProperty({ onNext, onBack }) {
+  const [addr, setAddr] = useState('');
+  const [type, setType] = useState('');
+  const [rent, setRent] = useState('');
+  const [tenant, setTenant] = useState('');
+  const propTypes = ['Appartement', 'Maison', 'Studio', 'Local commercial', 'Immeuble'];
+  return (
+    <div style={onboardingStyles.card}>
+      <div style={onboardingStyles.eyebrow}>Étape 3 / 4</div>
+      <h1 style={onboardingStyles.h1}>Ajoutez votre première propriété</h1>
+      <p style={onboardingStyles.sub}>Vous pourrez en ajouter d'autres plus tard, ou importer en masse.</p>
+
+      <FocusInput label="Adresse" placeholder="12 rue Lepic, 75018 Paris" value={addr} onChange={setAddr} />
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={onboardingStyles.label}>Type de bien</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {propTypes.map(t => (
+            <button key={t} onClick={() => setType(t)} style={{ padding: '8px 14px', borderRadius: 100, border: `1px solid ${type === t ? 'oklch(0.58 0.13 52)' : '#e8e7e2'}`, background: type === t ? 'oklch(0.95 0.04 52)' : 'white', color: type === t ? 'oklch(0.4 0.1 52)' : '#5a5a55', fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <FocusInput label="Loyer mensuel (€)" placeholder="950" value={rent} onChange={setRent} />
+        <FocusInput label="Nom du locataire" placeholder="M. Dubois" value={tenant} onChange={setTenant} />
+      </div>
+
+      <div style={{ background: 'oklch(0.95 0.04 52)', border: '1px solid oklch(0.88 0.06 52)', borderRadius: 10, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 1 }}>
+          <circle cx="8" cy="8" r="7" stroke="oklch(0.58 0.13 52)" strokeWidth="1.3"/>
+          <path d="M8 5v3.5M8 10.5v.5" stroke="oklch(0.58 0.13 52)" strokeWidth="1.3" strokeLinecap="round"/>
+        </svg>
+        <span style={{ fontSize: 13, color: 'oklch(0.42 0.11 52)', lineHeight: 1.6 }}>
+          <strong>Conseil :</strong> Vous pouvez aussi importer un bail PDF — iSimple extraira automatiquement toutes ces informations.
+        </span>
+      </div>
+
+      <button style={{ ...onboardingStyles.btnPrimary, background: '#1c1c1a' }} onClick={onNext}>Ajouter ce bien →</button>
+      <button style={{ background: 'none', border: 'none', color: '#9a9a92', fontSize: 13, cursor: 'pointer', textAlign: 'center', width: '100%', marginTop: 10, padding: 8 }} onClick={onNext}>Passer cette étape</button>
+    </div>
+  );
+}
+
+function StepTeam({ onNext, onBack }) {
+  const [email, setEmail] = useState('');
+  const [invited, setInvited] = useState([]);
+  const invite = () => {
+    if (email.trim()) { setInvited([...invited, email.trim()]); setEmail(''); }
+  };
+  return (
+    <div style={onboardingStyles.card}>
+      <div style={onboardingStyles.eyebrow}>Étape 4 / 4</div>
+      <h1 style={onboardingStyles.h1}>Invitez votre équipe</h1>
+      <p style={onboardingStyles.sub}>Collaborez avec vos gestionnaires, assistants ou partenaires.</p>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <input
+          placeholder="email@collaborateur.fr"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && invite()}
+          style={{ ...onboardingStyles.input, marginBottom: 0, flex: 1 }}
+        />
+        <button onClick={invite} style={{ background: '#1c1c1a', color: 'white', border: 'none', borderRadius: 8, padding: '0 18px', fontSize: 14, fontWeight: 500, cursor: 'pointer', flexShrink: 0 }}>Inviter</button>
+      </div>
+
+      {invited.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 12, color: '#9a9a92', marginBottom: 8 }}>Invitations envoyées</div>
+          {invited.map((inv, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'white', border: '1px solid #e8e7e2', borderRadius: 8, marginBottom: 6 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#f0efe9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: '#5a5a55', flexShrink: 0 }}>
+                {inv[0].toUpperCase()}
+              </div>
+              <span style={{ fontSize: 14, flex: 1 }}>{inv}</span>
+              <span style={{ fontSize: 12, color: '#9a9a92' }}>En attente</span>
+              <button onClick={() => setInvited(invited.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9a9a92', fontSize: 16 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 20 }}>
+        <label style={onboardingStyles.label}>Rôles disponibles</label>
+        {[
+          { role: 'Administrateur', desc: 'Accès complet — idéal pour associés' },
+          { role: 'Gestionnaire', desc: 'Gère les biens et locataires assignés' },
+          { role: 'Comptable', desc: 'Accès lectures + exports financiers' },
+        ].map(r => (
+          <div key={r.role} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f0efe9', fontSize: 14 }}>
+            <span style={{ fontWeight: 500 }}>{r.role}</span>
+            <span style={{ color: '#9a9a92', fontSize: 13 }}>{r.desc}</span>
+          </div>
+        ))}
+      </div>
+
+      <button style={onboardingStyles.btnPrimary} onClick={onNext}>Terminer la configuration →</button>
+      <button style={{ background: 'none', border: 'none', color: '#9a9a92', fontSize: 13, cursor: 'pointer', textAlign: 'center', width: '100%', marginTop: 10, padding: 8 }} onClick={onNext}>Passer pour l'instant</button>
+    </div>
+  );
+}
+
+function StepDone() {
+  return (
+    <div style={{ ...onboardingStyles.card, textAlign: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+        <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#1c1c1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <path d="M7 16l6 6 12-12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <h1 style={{ ...onboardingStyles.h1, textAlign: 'center' }}>Vous êtes prêt !</h1>
+      <p style={{ ...onboardingStyles.sub, textAlign: 'center' }}>Votre espace iSimple est configuré. Commencez par importer vos documents ou ajoutez des biens.</p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 28 }}>
+        {[
+          { icon: '📄', title: 'Importer des documents', desc: 'Baux, EDL, quittances…', href: 'Document Review.html' },
+          { icon: '🏠', title: 'Ajouter un bien', desc: 'Manuellement ou par import', href: '#' },
+          { icon: '👥', title: 'Ajouter un locataire', desc: 'Fiche complète + documents', href: '#' },
+          { icon: '📊', title: 'Voir le tableau de bord', desc: 'Vue d\'ensemble de votre parc', href: '#' },
+        ].map(item => (
+          <a key={item.title} href={item.href} style={{ display: 'block', padding: '16px', border: '1px solid #e8e7e2', borderRadius: 10, textDecoration: 'none', color: '#1c1c1a', background: 'white', transition: 'border-color 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#888'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#e8e7e2'}>
+            <div style={{ fontSize: 20, marginBottom: 6 }}>{item.icon}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>{item.title}</div>
+            <div style={{ fontSize: 12, color: '#9a9a92' }}>{item.desc}</div>
+          </a>
+        ))}
+      </div>
+
+      <a href="Document Review.html" style={{ display: 'block', background: '#1c1c1a', color: 'white', padding: '14px 24px', borderRadius: 8, textDecoration: 'none', fontSize: 15, fontWeight: 500, textAlign: 'center' }}>
+        Accéder à mon espace →
+      </a>
+    </div>
+  );
+}
+
+function App() {
+  const [step, setStep] = useState(() => {
+    const s = localStorage.getItem('isimple_onboard_step');
+    return s ? parseInt(s) : 0;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('isimple_onboard_step', step);
+  }, [step]);
+
+  const next = () => setStep(s => Math.min(s + 1, STEPS.length - 1));
+  const back = () => setStep(s => Math.max(s - 1, 0));
+
+  const renderStep = () => {
+    switch (step) {
+      case 0: return <StepAccount onNext={next} />;
+      case 1: return <StepAgency onNext={next} onBack={back} />;
+      case 2: return <StepProperty onNext={next} onBack={back} />;
+      case 3: return <StepTeam onNext={next} onBack={back} />;
+      case 4: return <StepDone />;
+    }
+  };
+
+  return (
+    <div style={onboardingStyles.layout}>
+      {/* Sidebar */}
+      <div style={onboardingStyles.sidebar}>
+        <a href="Landing Page.html" style={onboardingStyles.sidebarLogo}>
+          <LogoMark size={32} dark={true} />
+          <span style={onboardingStyles.logoText}>isimple</span>
+        </a>
+
+        <ul style={onboardingStyles.stepList}>
+          {STEPS.map((s, i) => (
+            <React.Fragment key={s.id}>
+              <li style={onboardingStyles.stepItem(i === step, i < step)}>
+                <div style={onboardingStyles.stepCircle(i === step, i < step)}>
+                  {i < step ? (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6l2.5 2.5 4.5-5" stroke="#1c1c1a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  ) : i + 1}
+                </div>
+                <span style={onboardingStyles.stepLabel(i === step)}>{s.label}</span>
+              </li>
+              {i < STEPS.length - 1 && <div style={onboardingStyles.stepLine} />}
+            </React.Fragment>
+          ))}
+        </ul>
+
+        <div style={{ marginTop: 'auto', paddingTop: 32, borderTop: '1px solid rgba(240,239,233,0.1)' }}>
+          <div style={{ fontSize: 13, color: 'rgba(240,239,233,0.4)', lineHeight: 1.6 }}>
+            Besoin d'aide ?<br />
+            <a href="#" style={{ color: 'rgba(240,239,233,0.6)', textDecoration: 'none' }}>support@isimple.app</a>
+          </div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div style={onboardingStyles.main}>
+        {renderStep()}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

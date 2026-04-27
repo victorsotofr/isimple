@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iSimple — Gestion immobilière, simplifiée</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #faf9f7;
+    --fg: #1c1c1a;
+    --fg2: #5a5a55;
+    --fg3: #9a9a92;
+    --accent: oklch(0.58 0.13 52);
+    --accent-light: oklch(0.95 0.04 52);
+    --dark-bg: #1c1c1a;
+    --dark-fg: #f0efe9;
+    --border: #e8e7e2;
+    --serif: 'DM Serif Display', Georgia, serif;
+    --sans: 'DM Sans', system-ui, sans-serif;
+  }
+
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 16px; line-height: 1.6; }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(250,249,247,0.92); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px; height: 60px;
+  }
+  .nav-logo { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-size: 20px; text-decoration: none; color: var(--fg); }
+  .nav-logo-mark {
+    width: 32px; height: 32px; background: var(--fg); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .nav-logo-mark svg { width: 18px; height: 18px; }
+  .nav-links { display: flex; gap: 32px; align-items: center; }
+  .nav-links a { color: var(--fg2); text-decoration: none; font-size: 14px; font-weight: 400; transition: color 0.15s; }
+  .nav-links a:hover { color: var(--fg); }
+  .nav-actions { display: flex; gap: 12px; align-items: center; }
+  .btn-ghost { background: none; border: 1px solid var(--border); color: var(--fg); padding: 8px 18px; border-radius: 6px; font-family: var(--sans); font-size: 14px; cursor: pointer; text-decoration: none; transition: border-color 0.15s, background 0.15s; }
+  .btn-ghost:hover { border-color: var(--fg3); background: rgba(0,0,0,0.03); }
+  .btn-primary { background: var(--fg); color: var(--bg); padding: 8px 18px; border-radius: 6px; font-family: var(--sans); font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; border: none; transition: opacity 0.15s; }
+  .btn-primary:hover { opacity: 0.82; }
+
+  /* HERO */
+  .hero {
+    max-width: 900px; margin: 0 auto; padding: 96px 48px 80px;
+    text-align: center;
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent-light); color: var(--accent);
+    font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 5px 14px; border-radius: 100px; margin-bottom: 32px;
+  }
+  .hero-eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .hero h1 {
+    font-family: var(--serif); font-size: clamp(40px, 6vw, 72px); line-height: 1.08; letter-spacing: -0.02em;
+    color: var(--fg); margin-bottom: 24px;
+  }
+  .hero h1 em { font-style: italic; color: var(--accent); }
+  .hero p {
+    font-size: 18px; color: var(--fg2); max-width: 540px; margin: 0 auto 40px;
+    font-weight: 300; line-height: 1.7;
+  }
+  .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn-hero { background: var(--fg); color: var(--bg); padding: 14px 28px; border-radius: 7px; font-family: var(--sans); font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none; border: none; transition: opacity 0.15s; display: inline-flex; align-items: center; gap: 8px; }
+  .btn-hero:hover { opacity: 0.82; }
+  .btn-hero-outline { background: none; border: 1px solid var(--border); color: var(--fg); padding: 14px 28px; border-radius: 7px; font-family: var(--sans); font-size: 15px; cursor: pointer; text-decoration: none; transition: border-color 0.15s; display: inline-flex; align-items: center; gap: 8px; }
+  .btn-hero-outline:hover { border-color: var(--fg3); }
+
+  /* APP PREVIEW */
+  .preview-wrap {
+    max-width: 1100px; margin: 0 auto 120px;
+    padding: 0 48px;
+  }
+  .preview-frame {
+    background: white; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04);
+    overflow: hidden;
+  }
+  .preview-titlebar {
+    background: #f5f4f0; border-bottom: 1px solid var(--border);
+    padding: 10px 16px; display: flex; align-items: center; gap: 8px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-r { background: #ff5f56; } .dot-y { background: #febc2e; } .dot-g { background: #27c840; }
+  .preview-url { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px; font-size: 11px; color: var(--fg3); margin-left: 8px; }
+  .preview-inner { display: flex; height: 440px; }
+  .preview-sidebar {
+    width: 200px; border-right: 1px solid var(--border);
+    background: #fefefe; padding: 16px 0; flex-shrink: 0;
+  }
+  .preview-brand { display: flex; align-items: center; gap: 8px; padding: 0 16px 16px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .preview-brand-mark { width: 28px; height: 28px; background: var(--fg); border-radius: 6px; }
+  .preview-brand-name { font-size: 13px; font-weight: 500; }
+  .preview-nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 16px; font-size: 13px; color: var(--fg2); cursor: pointer; }
+  .preview-nav-item.active { color: var(--fg); background: rgba(0,0,0,0.04); border-radius: 0; font-weight: 500; }
+  .preview-nav-icon { width: 14px; height: 14px; background: currentColor; border-radius: 2px; opacity: 0.5; flex-shrink: 0; }
+  .preview-main { flex: 1; padding: 24px 28px; overflow: hidden; }
+  .preview-main h2 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .preview-main p { font-size: 12px; color: var(--fg3); margin-bottom: 20px; }
+  .preview-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .preview-stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .preview-stat-label { font-size: 11px; color: var(--fg3); margin-bottom: 4px; }
+  .preview-stat-val { font-size: 22px; font-weight: 600; }
+  .preview-stat-val.accent { color: var(--accent); }
+  .preview-table { width: 100%; }
+  .preview-table-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; padding: 6px 10px; background: var(--bg); border-radius: 6px; margin-bottom: 4px; }
+  .preview-table-header span { font-size: 11px; color: var(--fg3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
+  .preview-table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .preview-table-row span { font-size: 12px; color: var(--fg2); }
+  .preview-table-row span:first-child { color: var(--fg); font-weight: 500; }
+  .preview-badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: 500; }
+  .badge-green { background: #e8f5e9; color: #2e7d32; }
+  .badge-yellow { background: #fff8e1; color: #f57f17; }
+  .badge-red { background: #ffebee; color: #c62828; }
+
+  /* DIVIDER */
+  .divider { height: 1px; background: var(--border); max-width: 1100px; margin: 0 auto; }
+
+  /* SECTION */
+  section { padding: 100px 48px; max-width: 1100px; margin: 0 auto; }
+
+  /* FEATURES */
+  .section-eyebrow { font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .section-eyebrow::before { content: '+'; font-size: 14px; }
+  .features-header { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: end; margin-bottom: 60px; }
+  .features-header h2 { font-family: var(--serif); font-size: clamp(32px, 4vw, 48px); line-height: 1.1; letter-spacing: -0.02em; }
+  .features-header p { font-size: 16px; color: var(--fg2); line-height: 1.7; }
+  .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .feature-card { background: var(--bg); padding: 32px; }
+  .feature-icon { width: 36px; height: 36px; margin-bottom: 20px; }
+  .feature-card h3 { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+  .feature-card p { font-size: 14px; color: var(--fg2); line-height: 1.65; }
+
+  /* HOW IT WORKS */
+  .hiw-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; }
+  .hiw-steps { }
+  .hiw-step { border-top: 1px solid var(--border); padding: 28px 0; cursor: pointer; }
+  .hiw-step:last-child { border-bottom: 1px solid var(--border); }
+  .hiw-step-header { display: flex; align-items: center; gap: 16px; }
+  .hiw-step-num { font-size: 12px; color: var(--fg3); font-weight: 500; width: 24px; }
+  .hiw-step-title { font-size: 18px; font-weight: 500; flex: 1; }
+  .hiw-step-toggle { color: var(--fg3); font-size: 20px; transition: transform 0.2s; }
+  .hiw-step.open .hiw-step-toggle { transform: rotate(45deg); }
+  .hiw-step-body { font-size: 14px; color: var(--fg2); line-height: 1.7; margin-top: 14px; margin-left: 40px; display: none; }
+  .hiw-step.open .hiw-step-body { display: block; }
+  .hiw-visual { position: sticky; top: 80px; }
+  .hiw-card {
+    background: white; border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; box-shadow: 0 2px 20px rgba(0,0,0,0.05);
+  }
+  .hiw-card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .hiw-card-title { font-size: 13px; font-weight: 600; }
+  .hiw-card-badge { font-size: 11px; padding: 3px 10px; border-radius: 100px; background: var(--accent-light); color: var(--accent); }
+  .hiw-card-body { padding: 20px; }
+  .hiw-doc-item { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+  .hiw-doc-icon { width: 32px; height: 40px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .hiw-doc-info { flex: 1; }
+  .hiw-doc-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+  .hiw-doc-sub { font-size: 11px; color: var(--fg3); }
+  .hiw-doc-status { font-size: 11px; }
+  .hiw-extracted { margin-top: 16px; background: var(--bg); border-radius: 8px; padding: 14px; }
+  .hiw-extracted-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg3); margin-bottom: 10px; }
+  .hiw-field { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); }
+  .hiw-field:last-child { border-bottom: none; }
+  .hiw-field-label { font-size: 12px; color: var(--fg2); }
+  .hiw-field-val { font-size: 12px; font-weight: 500; }
+  .hiw-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .hiw-btn-confirm { background: var(--fg); color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; flex: 1; }
+  .hiw-btn-edit { background: none; border: 1px solid var(--border); color: var(--fg); padding: 8px 16px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+
+  /* DARK SECTION */
+  .dark-section {
+    background: var(--dark-bg); color: var(--dark-fg);
+    padding: 100px 48px; margin: 60px 0 0;
+  }
+  .dark-section-inner { max-width: 1100px; margin: 0 auto; }
+  .dark-section h2 { font-family: var(--serif); font-size: clamp(36px, 5vw, 60px); line-height: 1.08; letter-spacing: -0.02em; text-align: center; margin-bottom: 16px; }
+  .dark-section > .dark-section-inner > p { text-align: center; color: #888880; font-size: 17px; margin-bottom: 48px; }
+  .dark-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #333330; border: 1px solid #333330; border-radius: 12px; overflow: hidden; margin-top: 64px; }
+  .dark-stat { background: var(--dark-bg); padding: 40px; }
+  .dark-stat-num { font-family: var(--serif); font-size: 48px; color: var(--dark-fg); margin-bottom: 8px; }
+  .dark-stat-label { font-size: 14px; color: #888880; line-height: 1.5; }
+  .dark-cta-row { display: flex; justify-content: center; margin-bottom: 0; }
+  .btn-dark { background: white; color: var(--dark-bg); padding: 14px 28px; border-radius: 7px; font-family: var(--sans); font-size: 15px; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: opacity 0.15s; }
+  .btn-dark:hover { opacity: 0.88; }
+
+  /* FAQ */
+  .faq-wrap { display: grid; grid-template-columns: 1fr 2fr; gap: 80px; align-items: start; }
+  .faq-left h2 { font-family: var(--serif); font-size: clamp(32px, 4vw, 44px); line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 24px; }
+  .faq-left a { display: inline-flex; align-items: center; gap: 8px; background: var(--fg); color: var(--bg); padding: 12px 22px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; transition: opacity 0.15s; }
+  .faq-left a:hover { opacity: 0.82; }
+  .faq-item { border-top: 1px solid var(--border); }
+  .faq-item:last-child { border-bottom: 1px solid var(--border); }
+  .faq-question { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; cursor: pointer; gap: 16px; }
+  .faq-question span:first-child { font-size: 15px; font-weight: 400; line-height: 1.5; flex: 1; }
+  .faq-toggle { width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; color: var(--fg2); transition: transform 0.2s; }
+  .faq-item.open .faq-toggle { transform: rotate(45deg); }
+  .faq-answer { font-size: 14px; color: var(--fg2); line-height: 1.7; padding-bottom: 20px; display: none; }
+  .faq-item.open .faq-answer { display: block; }
+
+  /* FOOTER */
+  footer { border-top: 1px solid var(--border); padding: 60px 48px; }
+  .footer-inner { max-width: 1100px; margin: 0 auto; }
+  .footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; margin-bottom: 48px; }
+  .footer-brand { }
+  .footer-logo { font-family: var(--serif); font-size: 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+  .footer-logo-mark { width: 28px; height: 28px; background: var(--fg); border-radius: 6px; }
+  .footer-desc { font-size: 13px; color: var(--fg3); line-height: 1.6; max-width: 240px; }
+  .footer-col h4 { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg3); margin-bottom: 16px; }
+  .footer-col a { display: block; font-size: 13px; color: var(--fg2); text-decoration: none; margin-bottom: 10px; transition: color 0.15s; }
+  .footer-col a:hover { color: var(--fg); }
+  .footer-bottom { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 24px; }
+  .footer-copy { font-size: 12px; color: var(--fg3); }
+  .footer-wordmark { font-family: var(--serif); font-size: 72px; color: var(--border); letter-spacing: -0.04em; line-height: 1; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="nav-logo-mark">
+      <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="2" y="2" width="6" height="6" rx="1" fill="white"/>
+        <rect x="10" y="2" width="6" height="6" rx="1" fill="white" opacity="0.5"/>
+        <rect x="2" y="10" width="6" height="6" rx="1" fill="white" opacity="0.5"/>
+        <rect x="10" y="10" width="6" height="6" rx="1" fill="white"/>
+      </svg>
+    </div>
+    isimple
+  </a>
+  <div class="nav-links">
+    <a href="#">Fonctionnalités</a>
+    <a href="#">Tarifs</a>
+    <a href="#">Clients</a>
+    <a href="#">Ressources</a>
+  </div>
+  <div class="nav-actions">
+    <a href="Onboarding.html" class="btn-ghost">Se connecter</a>
+    <a href="Onboarding.html" class="btn-primary">Commencer →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">Gestion immobilière propulsée par l'IA</div>
+  <h1>Gérez vos biens<br>avec <em>clarté.</em></h1>
+  <p>iSimple automatise la lecture de vos documents, extrait les données clés et les soumet à votre validation. Zéro saisie manuelle.</p>
+  <div class="hero-ctas">
+    <a href="Onboarding.html" class="btn-hero">Commencer gratuitement →</a>
+    <a href="#hiw" class="btn-hero-outline">Comment ça marche</a>
+  </div>
+</div>
+
+<!-- APP PREVIEW -->
+<div class="preview-wrap">
+  <div class="preview-frame">
+    <div class="preview-titlebar">
+      <div class="dot dot-r"></div>
+      <div class="dot dot-y"></div>
+      <div class="dot dot-g"></div>
+      <div class="preview-url">isimple.app/proprietes</div>
+    </div>
+    <div class="preview-inner">
+      <div class="preview-sidebar">
+        <div class="preview-brand">
+          <div class="preview-brand-mark"></div>
+          <span class="preview-brand-name">Mon Agence</span>
+        </div>
+        <div class="preview-nav-item active">
+          <div class="preview-nav-icon" style="border-radius:3px;"></div> Propriétés
+        </div>
+        <div class="preview-nav-item">
+          <div class="preview-nav-icon" style="border-radius:50%;"></div> Locataires
+        </div>
+        <div class="preview-nav-item">
+          <div class="preview-nav-icon" style="width:14px;height:10px;border-radius:2px;"></div> Messages
+        </div>
+        <div class="preview-nav-item">
+          <div class="preview-nav-icon" style="border-radius:50%;width:12px;height:12px;"></div> Tickets
+        </div>
+        <div class="preview-nav-item">
+          <div class="preview-nav-icon"></div> Documents
+        </div>
+        <div class="preview-nav-item">
+          <div class="preview-nav-icon" style="border-radius:50%;"></div> Agenda
+        </div>
+      </div>
+      <div class="preview-main">
+        <h2>Propriétés</h2>
+        <p>8 biens actifs · 3 documents à valider</p>
+        <div class="preview-stats">
+          <div class="preview-stat">
+            <div class="preview-stat-label">Biens</div>
+            <div class="preview-stat-val">8</div>
+          </div>
+          <div class="preview-stat">
+            <div class="preview-stat-label">Locataires</div>
+            <div class="preview-stat-val">14</div>
+          </div>
+          <div class="preview-stat">
+            <div class="preview-stat-label">Loyers / mois</div>
+            <div class="preview-stat-val accent">12 400 €</div>
+          </div>
+          <div class="preview-stat">
+            <div class="preview-stat-label">Taux d'occupation</div>
+            <div class="preview-stat-val">96%</div>
+          </div>
+        </div>
+        <div class="preview-table">
+          <div class="preview-table-header">
+            <span>Adresse</span><span>Locataire</span><span>Loyer</span><span>Statut</span>
+          </div>
+          <div class="preview-table-row">
+            <span>12 rue Lepic, Paris 18</span>
+            <span>M. Dubois</span>
+            <span>1 200 €</span>
+            <span><span class="preview-badge badge-green">Payé</span></span>
+          </div>
+          <div class="preview-table-row">
+            <span>3 av. Victor Hugo, Lyon</span>
+            <span>Mme Laurent</span>
+            <span>850 €</span>
+            <span><span class="preview-badge badge-yellow">En attente</span></span>
+          </div>
+          <div class="preview-table-row">
+            <span>7 rue du Faubourg, Bx</span>
+            <span>M. Martin</span>
+            <span>720 €</span>
+            <span><span class="preview-badge badge-green">Payé</span></span>
+          </div>
+          <div class="preview-table-row">
+            <span>24 allée des Roses, Nice</span>
+            <span>—</span>
+            <span>980 €</span>
+            <span><span class="preview-badge badge-red">Vacant</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- FEATURES -->
+<section>
+  <div class="section-eyebrow">Fonctionnalités</div>
+  <div class="features-header">
+    <h2>Tout ce dont vous avez besoin, rien de plus.</h2>
+    <p>Une plateforme conçue pour les agents et propriétaires qui veulent reprendre le contrôle de leur patrimoine immobilier sans complexité.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <svg class="feature-icon" viewBox="0 0 36 36" fill="none">
+        <rect x="6" y="4" width="18" height="24" rx="2" stroke="#1c1c1a" stroke-width="1.5"/>
+        <path d="M10 12h10M10 16h10M10 20h6" stroke="#1c1c1a" stroke-width="1.5" stroke-linecap="round"/>
+        <circle cx="27" cy="27" r="6" fill="#faf9f7" stroke="#1c1c1a" stroke-width="1.5"/>
+        <path d="M25 27l1.5 1.5 2.5-2.5" stroke="#1c1c1a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h3>Lecture IA des documents</h3>
+      <p>Baux, états des lieux, quittances — l'IA extrait automatiquement toutes les données structurées en quelques secondes.</p>
+    </div>
+    <div class="feature-card">
+      <svg class="feature-icon" viewBox="0 0 36 36" fill="none">
+        <circle cx="18" cy="18" r="12" stroke="#1c1c1a" stroke-width="1.5"/>
+        <path d="M18 11v7l4 4" stroke="#1c1c1a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h3>Validation humaine</h3>
+      <p>Chaque extraction est soumise à votre approbation. Confirmez, corrigez ou rejetez en un clic avant intégration.</p>
+    </div>
+    <div class="feature-card">
+      <svg class="feature-icon" viewBox="0 0 36 36" fill="none">
+        <rect x="4" y="8" width="28" height="20" rx="2" stroke="#1c1c1a" stroke-width="1.5"/>
+        <path d="M4 13h28" stroke="#1c1c1a" stroke-width="1.5"/>
+        <path d="M10 18h4M10 22h8" stroke="#1c1c1a" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <h3>Gestion des locataires</h3>
+      <p>Historique complet, documents associés, communications centralisées. Tout le parcours locataire en un seul endroit.</p>
+    </div>
+    <div class="feature-card">
+      <svg class="feature-icon" viewBox="0 0 36 36" fill="none">
+        <path d="M6 26L14 18l6 6 10-12" stroke="#1c1c1a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h3>Tableaux de bord</h3>
+      <p>Visualisez vos loyers, taux d'occupation et rentabilité en temps réel. Des indicateurs clairs pour décider vite.</p>
+    </div>
+    <div class="feature-card">
+      <svg class="feature-icon" viewBox="0 0 36 36" fill="none">
+        <path d="M10 10h16v16H10z" rx="2" stroke="#1c1c1a" stroke-width="1.5"/>
+        <path d="M10 15h16M15 15v11" stroke="#1c1c1a" stroke-width="1.5"/>
+      </svg>
+      <h3>Gestion des tickets</h3>
+      <p>Signalements, interventions et prestataires organisés dans un workflow clair. Plus rien ne passe entre les mailles.</p>
+    </div>
+    <div class="feature-card">
+      <svg class="feature-icon" viewBox="0 0 36 36" fill="none">
+        <rect x="6" y="6" width="10" height="10" rx="2" stroke="#1c1c1a" stroke-width="1.5"/>
+        <rect x="20" y="6" width="10" height="10" rx="2" stroke="#1c1c1a" stroke-width="1.5"/>
+        <rect x="6" y="20" width="10" height="10" rx="2" stroke="#1c1c1a" stroke-width="1.5"/>
+        <rect x="20" y="20" width="10" height="10" rx="2" stroke="#1c1c1a" stroke-width="1.5"/>
+      </svg>
+      <h3>Multi-portefeuille</h3>
+      <p>Gérez plusieurs agences ou portefeuilles depuis une seule interface. Idéal pour les gestionnaires multi-mandants.</p>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="hiw" style="padding-top:60px;">
+  <div class="section-eyebrow">Comment ça marche</div>
+  <div class="hiw-wrap">
+    <div class="hiw-steps">
+      <h2 style="font-family:var(--serif);font-size:clamp(28px,3.5vw,42px);line-height:1.1;letter-spacing:-0.02em;margin-bottom:40px;">Conçu pour lire<br>comme un humain.</h2>
+      <div class="hiw-step open" onclick="toggleStep(this)">
+        <div class="hiw-step-header">
+          <span class="hiw-step-num">01</span>
+          <span class="hiw-step-title">Importez vos documents</span>
+          <span class="hiw-step-toggle">+</span>
+        </div>
+        <div class="hiw-step-body">Glissez-déposez vos baux, états des lieux, quittances ou tout autre document. PDF, images, scans — tout format est accepté.</div>
+      </div>
+      <div class="hiw-step" onclick="toggleStep(this)">
+        <div class="hiw-step-header">
+          <span class="hiw-step-num">02</span>
+          <span class="hiw-step-title">L'IA analyse et extrait</span>
+          <span class="hiw-step-toggle">+</span>
+        </div>
+        <div class="hiw-step-body">Notre moteur IA lit le document, comprend sa structure et extrait les champs clés : loyer, locataire, dates, adresse, conditions spéciales.</div>
+      </div>
+      <div class="hiw-step" onclick="toggleStep(this)">
+        <div class="hiw-step-header">
+          <span class="hiw-step-num">03</span>
+          <span class="hiw-step-title">Vous validez en un clic</span>
+          <span class="hiw-step-toggle">+</span>
+        </div>
+        <div class="hiw-step-body">Les données extraites vous sont présentées à côté du document original. Confirmez si c'est exact, ou corrigez ce qui ne l'est pas.</div>
+      </div>
+      <div class="hiw-step" onclick="toggleStep(this)">
+        <div class="hiw-step-header">
+          <span class="hiw-step-num">04</span>
+          <span class="hiw-step-title">Les données s'intègrent automatiquement</span>
+          <span class="hiw-step-toggle">+</span>
+        </div>
+        <div class="hiw-step-body">Une fois validées, les données renseignent votre portefeuille sans aucune saisie manuelle. Votre base est toujours à jour.</div>
+      </div>
+    </div>
+    <div class="hiw-visual">
+      <div class="hiw-card">
+        <div class="hiw-card-header">
+          <span class="hiw-card-title">Documents à valider</span>
+          <span class="hiw-card-badge">3 en attente</span>
+        </div>
+        <div class="hiw-card-body">
+          <div class="hiw-doc-item" style="border-color:var(--accent);background:var(--accent-light);">
+            <div class="hiw-doc-icon">
+              <svg width="14" height="16" viewBox="0 0 14 16" fill="none"><rect x="1" y="1" width="10" height="14" rx="1" stroke="#888" stroke-width="1.2"/><path d="M3 5h6M3 8h6M3 11h3" stroke="#888" stroke-width="1.2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="hiw-doc-info">
+              <div class="hiw-doc-name">Bail_Dubois_2024.pdf</div>
+              <div class="hiw-doc-sub">Bail · 12 rue Lepic, Paris 18</div>
+            </div>
+            <div class="hiw-doc-status" style="color:var(--accent);font-weight:500;font-size:11px;">À valider</div>
+          </div>
+          <div class="hiw-doc-item">
+            <div class="hiw-doc-icon">
+              <svg width="14" height="16" viewBox="0 0 14 16" fill="none"><rect x="1" y="1" width="10" height="14" rx="1" stroke="#ccc" stroke-width="1.2"/><path d="M3 5h6M3 8h6M3 11h3" stroke="#ccc" stroke-width="1.2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="hiw-doc-info">
+              <div class="hiw-doc-name" style="color:var(--fg2);">EDL_Martin_2024.pdf</div>
+              <div class="hiw-doc-sub">État des lieux · Lyon</div>
+            </div>
+            <div class="hiw-doc-status" style="color:var(--fg3);font-size:11px;">En cours…</div>
+          </div>
+          <div class="hiw-extracted">
+            <div class="hiw-extracted-title">Données extraites par l'IA</div>
+            <div class="hiw-field"><span class="hiw-field-label">Locataire</span><span class="hiw-field-val">Jean-Pierre Dubois</span></div>
+            <div class="hiw-field"><span class="hiw-field-label">Loyer mensuel</span><span class="hiw-field-val">1 200 €</span></div>
+            <div class="hiw-field"><span class="hiw-field-label">Début du bail</span><span class="hiw-field-val">1 mars 2024</span></div>
+            <div class="hiw-field"><span class="hiw-field-label">Durée</span><span class="hiw-field-val">3 ans</span></div>
+            <div class="hiw-field"><span class="hiw-field-label">Charges</span><span class="hiw-field-val">80 € / mois</span></div>
+          </div>
+          <div class="hiw-actions">
+            <button class="hiw-btn-confirm" onclick="this.textContent='✓ Confirmé';this.style.background='#2e7d32'">Confirmer</button>
+            <button class="hiw-btn-edit">Modifier</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DARK SECTION -->
+<div class="dark-section">
+  <div class="dark-section-inner">
+    <h2>Prêt pour la gestion<br>professionnelle.</h2>
+    <p>De la TPE à l'agence multi-sites, iSimple s'adapte à la taille de votre portefeuille.</p>
+    <div class="dark-cta-row" style="margin-top:32px;">
+      <a href="Onboarding.html" class="btn-dark">Commencer gratuitement →</a>
+    </div>
+    <div class="dark-stats">
+      <div class="dark-stat">
+        <div class="dark-stat-num">98%</div>
+        <div class="dark-stat-label">Précision d'extraction sur les baux résidentiels standard</div>
+      </div>
+      <div class="dark-stat">
+        <div class="dark-stat-num">&lt; 30s</div>
+        <div class="dark-stat-label">Temps moyen d'analyse d'un document complet</div>
+      </div>
+      <div class="dark-stat">
+        <div class="dark-stat-num">4h/sem</div>
+        <div class="dark-stat-label">Économisées en moyenne par gestionnaire chaque semaine</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FAQ -->
+<section style="padding-top:100px;">
+  <div class="faq-wrap">
+    <div class="faq-left">
+      <div class="section-eyebrow">FAQ</div>
+      <h2>Questions, réponses.</h2>
+      <a href="Onboarding.html">Essayer gratuitement →</a>
+    </div>
+    <div class="faq-right">
+      <div class="faq-item open">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Quels types de documents iSimple peut-il lire ?</span>
+          <span class="faq-toggle">+</span>
+        </div>
+        <div class="faq-answer">iSimple traite les baux d'habitation et commerciaux, états des lieux, quittances de loyer, diagnostics (DPE, CREP), contrats de prestataires et tout document PDF ou image relatif à la gestion immobilière.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>L'extraction est-elle vraiment fiable ?</span>
+          <span class="faq-toggle">+</span>
+        </div>
+        <div class="faq-answer">Notre taux d'extraction atteint 98% sur les documents standards. Et puisque chaque extraction passe par votre validation avant d'être enregistrée, vous gardez un contrôle total sur la qualité de vos données.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Mes données sont-elles sécurisées ?</span>
+          <span class="faq-toggle">+</span>
+        </div>
+        <div class="faq-answer">Toutes les données sont chiffrées au repos et en transit. Nos serveurs sont hébergés en Europe (conformité RGPD). Vos documents ne sont jamais utilisés pour entraîner des modèles tiers.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Puis-je importer mes données existantes ?</span>
+          <span class="faq-toggle">+</span>
+        </div>
+        <div class="faq-answer">Oui — nous proposons un import CSV pour vos propriétés et locataires, ainsi qu'une migration assistée depuis les principaux logiciels de gestion du marché.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-question" onclick="toggleFaq(this)">
+          <span>Y a-t-il un engagement de durée ?</span>
+          <span class="faq-toggle">+</span>
+        </div>
+        <div class="faq-answer">Aucun. Les abonnements sont mensuels, sans période minimale. Vous pouvez exporter vos données à tout moment.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="footer-logo">
+          <div class="footer-logo-mark"></div>
+          isimple
+        </div>
+        <div class="footer-desc">La gestion immobilière propulsée par l'intelligence artificielle. Conçu pour les professionnels de l'immobilier.</div>
+      </div>
+      <div class="footer-col">
+        <h4>Produit</h4>
+        <a href="#">Fonctionnalités</a>
+        <a href="#">Tarifs</a>
+        <a href="#">Sécurité</a>
+        <a href="#">Nouveautés</a>
+      </div>
+      <div class="footer-col">
+        <h4>Entreprise</h4>
+        <a href="#">À propos</a>
+        <a href="#">Blog</a>
+        <a href="#">Carrières</a>
+        <a href="#">Contact</a>
+      </div>
+      <div class="footer-col">
+        <h4>Légal</h4>
+        <a href="#">Confidentialité</a>
+        <a href="#">CGU</a>
+        <a href="#">RGPD</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span class="footer-copy">isimple © 2026</span>
+      <div class="footer-wordmark">isimple</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+function toggleStep(el) {
+  document.querySelectorAll('.hiw-step').forEach(s => s.classList.remove('open'));
+  el.classList.add('open');
+}
+function toggleFaq(btn) {
+  const item = btn.closest('.faq-item');
+  item.classList.toggle('open');
+}
+
+// Tweaks
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "oklch(0.55 0.18 320)",
+  "darkBg": "#1c1c1a",
+  "heroHeadline": "Gérez vos biens avec clarté."
+}/*EDITMODE-END*/;
+
+window.addEventListener('message', e => {
+  if (e.data?.type === '__activate_edit_mode') showTweaks();
+  if (e.data?.type === '__deactivate_edit_mode') hideTweaks();
+});
+window.parent.postMessage({type: '__edit_mode_available'}, '*');
+
+function showTweaks() { document.getElementById('tweaks').style.display = 'block'; }
+function hideTweaks() { document.getElementById('tweaks').style.display = 'none'; }
+</script>
+
+<!-- TWEAKS PANEL -->
+<div id="tweaks" style="display:none;position:fixed;bottom:24px;right:24px;z-index:9999;background:white;border:1px solid #e8e7e2;border-radius:12px;padding:20px;width:260px;box-shadow:0 8px 32px rgba(0,0,0,0.12);font-family:'DM Sans',sans-serif;">
+  <div style="font-size:13px;font-weight:600;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+    Tweaks
+    <button onclick="hideTweaks()" style="background:none;border:none;cursor:pointer;font-size:18px;color:#888;">×</button>
+  </div>
+  <div style="margin-bottom:14px;">
+    <label style="font-size:11px;color:#888;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Couleur accent</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div onclick="setAccent('oklch(0.58 0.13 52)')" style="width:28px;height:28px;border-radius:50%;background:oklch(0.58 0.13 52);cursor:pointer;border:2px solid transparent;" title="Terracotta"></div>
+      <div onclick="setAccent('oklch(0.55 0.18 265)')" style="width:28px;height:28px;border-radius:50%;background:oklch(0.55 0.18 265);cursor:pointer;" title="Indigo"></div>
+      <div onclick="setAccent('oklch(0.55 0.18 155)')" style="width:28px;height:28px;border-radius:50%;background:oklch(0.55 0.18 155);cursor:pointer;" title="Vert"></div>
+      <div onclick="setAccent('oklch(0.55 0.18 320)')" style="width:28px;height:28px;border-radius:50%;background:oklch(0.55 0.18 320);cursor:pointer;" title="Violet"></div>
+    </div>
+  </div>
+  <div>
+    <label style="font-size:11px;color:#888;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Fond hero</label>
+    <div style="display:flex;gap:8px;">
+      <div onclick="setHeroBg('#faf9f7')" style="width:28px;height:28px;border-radius:50%;background:#faf9f7;cursor:pointer;border:1px solid #ddd;"></div>
+      <div onclick="setHeroBg('#f0ede6')" style="width:28px;height:28px;border-radius:50%;background:#f0ede6;cursor:pointer;border:1px solid #ddd;"></div>
+      <div onclick="setHeroBg('#1c1c1a')" style="width:28px;height:28px;border-radius:50%;background:#1c1c1a;cursor:pointer;border:1px solid #ddd;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setAccent(v) {
+  document.documentElement.style.setProperty('--accent', v);
+  window.parent.postMessage({type:'__edit_mode_set_keys', edits:{accentColor: v}}, '*');
+}
+function setHeroBg(v) {
+  document.querySelector('.hero').style.background = v;
+  if (v === '#1c1c1a') {
+    document.querySelector('.hero').style.color = '#faf9f7';
+    document.querySelector('.hero h1').style.color = '#faf9f7';
+  } else {
+    document.querySelector('.hero').style.color = '';
+    document.querySelector('.hero h1').style.color = '';
+  }
+}
+</script>
+
+</body>
+</html>

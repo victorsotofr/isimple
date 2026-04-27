@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>isimple — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #faf9f7;
+    --fg: #1c1c1a;
+    --fg2: #5a5a55;
+    --fg3: #9a9a92;
+    --surface: #ffffff;
+    --border: #e8e7e2;
+    --accent: oklch(0.55 0.18 320);
+  }
+
+  html.dark {
+    --bg: #141413;
+    --fg: #f0efe9;
+    --fg2: #8a8a85;
+    --fg3: #5a5a55;
+    --surface: #1c1c1a;
+    --border: #2a2a28;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #root { height: 100%; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Animations */
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+
+  .shimmer {
+    background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+    background-size: 400px 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 4px;
+  }
+
+  /* Global focus */
+  button:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid oklch(0.55 0.18 320);
+    outline-offset: 2px;
+  }
+
+  /* Keyboard shortcut hints */
+  .kbd-hint {
+    font-size: 10px;
+    font-family: inherit;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--fg3);
+    letter-spacing: 0.04em;
+  }
+
+  /* Transitions */
+  * { transition-property: background-color, border-color, color, opacity; transition-duration: 0.15s; }
+  button, a { transition-property: background-color, border-color, color, opacity, box-shadow, transform; transition-duration: 0.12s; }
+  button:active { transform: scale(0.97); }
+
+  /* Density: compact mode */
+  html.compact-mode table td, html.compact-mode table th { padding: 4px 8px !important; font-size: 12px !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Data (plain JS, no Babel needed) -->
+<script src="app/data.js"></script>
+
+<!-- Components (Babel JSX, load in order) -->
+<script type="text/babel" src="app/icons.jsx"></script>
+<script type="text/babel" src="app/shell.jsx"></script>
+<script type="text/babel" src="app/inbox.jsx"></script>
+<script type="text/babel" src="app/tickets.jsx"></script>
+<script type="text/babel" src="app/properties.jsx"></script>
+<script type="text/babel" src="app/pages.jsx"></script>
+<script type="text/babel" src="app/main.jsx"></script>
+</body>
+</html>

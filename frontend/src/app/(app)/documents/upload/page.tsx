@@ -30,6 +30,7 @@ type ExtractedData = {
   landlord_last_name?: string | null;
   property_address?: string | null;
   property_city?: string | null;
+  property_postal_code?: string | null;
   document_date?: string | null;
   rent_amount?: number | null;
   summary?: string | null;

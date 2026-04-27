@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
-import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { DM_Sans, DM_Serif_Display, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
-const inter = Inter({
+const dmSans = DM_Sans({
   variable: "--font-sans",
+  weight: ["300", "400", "500", "600", "700"],
+  subsets: ["latin"],
+});
+
+const dmSerif = DM_Serif_Display({
+  variable: "--font-serif",
+  weight: ["400"],
   subsets: ["latin"],
 });
 
@@ -26,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <body className={`${inter.variable} ${ibmPlexMono.variable} antialiased`}>
+      <body className={`${dmSans.variable} ${dmSerif.variable} ${ibmPlexMono.variable} antialiased`}>
         {children}
         <Toaster />
       </body>
