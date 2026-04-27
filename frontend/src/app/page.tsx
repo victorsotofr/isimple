@@ -227,7 +227,7 @@ export default function LandingPage() {
             </div>
             <div
               aria-hidden="true"
-              className="mt-8 select-none font-serif text-[clamp(72px,18vw,210px)] leading-[0.75] tracking-[-0.065em] text-border"
+              className="mt-10 w-full select-none overflow-hidden font-serif text-[clamp(96px,22vw,260px)] leading-[0.72] tracking-[-0.075em] text-[#deddd8]"
             >
               isimple
             </div>
