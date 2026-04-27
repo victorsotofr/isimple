@@ -174,9 +174,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="border-t px-5 py-[60px] lg:px-12">
-        <div className="mx-auto max-w-6xl">
-          <div className="grid gap-10 md:grid-cols-[2fr_1fr_1fr_1fr]">
+      <footer className="relative min-h-[760px] overflow-hidden border-t bg-background px-5 py-16 lg:px-12">
+        <div className="relative z-10 mx-auto max-w-6xl">
+          <div className="grid gap-10 md:grid-cols-[1.7fr_1fr_1fr_1fr] lg:gap-20">
             <div>
               <Link href="/" className="mb-3 flex items-center gap-2 text-foreground">
                 <span className="flex size-7 items-center justify-center rounded-md bg-foreground text-background">
@@ -216,7 +216,7 @@ export default function LandingPage() {
             />
           </div>
 
-          <div className="mt-12 border-t pt-6">
+          <div className="mt-20 border-t pt-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-xs text-muted-foreground">isimple © 2026</span>
               <div className="flex gap-5 text-xs text-muted-foreground">
@@ -225,13 +225,14 @@ export default function LandingPage() {
                 <Link href="#" className="transition-colors hover:text-foreground">Contact</Link>
               </div>
             </div>
-            <div
-              aria-hidden="true"
-              className="mt-10 w-full select-none overflow-hidden font-serif text-[clamp(96px,22vw,260px)] leading-[0.72] tracking-[-0.075em] text-[#deddd8]"
-            >
-              isimple
-            </div>
           </div>
+        </div>
+
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-[-0.18em] left-[max(20px,calc((100vw-72rem)/2))] select-none whitespace-nowrap font-serif text-[clamp(190px,37vw,720px)] leading-none tracking-[-0.085em] text-[#ecebe8]"
+        >
+          isimple
         </div>
       </footer>
     </main>
