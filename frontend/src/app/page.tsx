@@ -174,7 +174,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <footer className="relative min-h-[760px] overflow-hidden border-t bg-background px-5 py-16 lg:px-12">
+      <footer className="relative min-h-[640px] overflow-hidden border-t bg-background px-5 py-16 lg:px-12">
         <div className="relative z-10 mx-auto max-w-6xl">
           <div className="grid gap-10 md:grid-cols-[1.7fr_1fr_1fr_1fr] lg:gap-20">
             <div>
@@ -230,7 +230,7 @@ export default function LandingPage() {
 
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-[-0.18em] left-[max(20px,calc((100vw-72rem)/2))] select-none whitespace-nowrap font-serif text-[clamp(190px,37vw,720px)] leading-none tracking-[-0.085em] text-[#ecebe8]"
+          className="pointer-events-none absolute bottom-[-0.16em] left-[max(20px,calc((100vw-72rem)/2))] select-none whitespace-nowrap font-serif text-[clamp(132px,28vw,480px)] leading-none tracking-[-0.08em] text-[#ecebe8]"
         >
           isimple
         </div>
