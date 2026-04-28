@@ -41,6 +41,15 @@ function fmtTime(iso: string) {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
 
+function agentErrorMessage(data: unknown): string {
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>;
+    if (typeof obj.detail === 'string') return obj.detail;
+    if (typeof obj.error === 'string') return obj.error;
+  }
+  return 'Agent IA indisponible.';
+}
+
 export function InboxView() {
   const { t } = useLanguage();
   const { activeWorkspace } = useWorkspace();
@@ -57,6 +66,7 @@ export function InboxView() {
   const [newConvOpen, setNewConvOpen] = useState(false);
   const [newConv, setNewConv] = useState({ tenant_id: '', subject: '', first_message: '' });
   const [creating, setCreating] = useState(false);
+  const [aiError, setAiError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -142,8 +152,9 @@ export function InboxView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspace_id: activeWorkspace.id, message }),
       });
+      const data = await res.json();
       if (res.ok) {
-        const { category } = await res.json();
+        const { category } = data;
         if (category) {
           await supabase.from('conversations').update({ category }).eq('id', convId);
           setConversations(prev =>
@@ -153,8 +164,13 @@ export function InboxView() {
             setSelected(prev => prev ? { ...prev, category } : prev);
           }
         }
+        setAiError('');
+      } else {
+        setAiError(agentErrorMessage(data));
       }
-    } catch { /* agent offline — skip */ }
+    } catch {
+      setAiError('Agent IA indisponible.');
+    }
   }
 
   async function handleAiDraft() {
@@ -180,12 +196,18 @@ export function InboxView() {
           tone: 'formal',
         }),
       });
+      const data = await res.json();
       if (res.ok) {
-        const { draft } = await res.json();
+        const { draft } = data;
         setCompose(draft ?? '');
         setSendRole('manager');
+        setAiError('');
+      } else {
+        setAiError(agentErrorMessage(data));
       }
-    } catch { /* agent offline */ }
+    } catch {
+      setAiError('Agent IA indisponible.');
+    }
     setDrafting(false);
   }
 
@@ -351,6 +373,13 @@ export function InboxView() {
               <div className="flex items-center gap-2 border-b bg-brand-muted px-4 py-2 text-xs text-muted-foreground">
                 <Bot className="size-3.5 text-brand" />
                 L&apos;IA suit cette conversation. Générez un brouillon ou répondez manuellement.
+              </div>
+            )}
+
+            {aiError && (
+              <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-2 text-xs text-destructive">
+                <Bot className="size-3.5" />
+                {aiError}
               </div>
             )}
 

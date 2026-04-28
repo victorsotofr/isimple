@@ -15,25 +15,25 @@ import {
 const features = [
   {
     icon: Inbox,
-    title: 'Boîte de réception intelligente',
-    body: 'Centralisez les messages locataires, qualifiez les demandes et gardez les urgences visibles.',
+    title: 'Une inbox qui remet de l’ordre',
+    body: 'Centralisez les messages locataires, qualifiez les demandes et gardez les urgences visibles sans chercher dans dix outils.',
   },
   {
     icon: FileText,
-    title: "Documents analysés par l'IA",
-    body: 'Importez baux, quittances et factures. isimple extrait les informations utiles et propose les rattachements.',
+    title: 'Données propres depuis vos documents',
+    body: 'Importez baux, quittances et factures. isimple extrait les informations utiles et construit une base fiable.',
   },
   {
     icon: Ticket,
-    title: 'Tickets et prestataires',
-    body: 'Transformez une conversation en intervention suivie, avec contexte, priorité et historique.',
+    title: 'Actions suivies, pas dispersées',
+    body: 'Transformez une conversation en intervention suivie, avec contexte, priorité, prestataire et historique.',
   },
 ] as const;
 
 const steps = [
-  ['01', 'Connectez vos lots', 'Créez vos biens, locataires et documents importants dans un espace partagé.'],
-  ['02', "Laissez l'IA trier", 'Les messages et documents sont classés pour accélérer les décisions.'],
-  ['03', 'Gardez la main', 'Vous validez, répondez ou déléguez à un prestataire depuis un même tableau de bord.'],
+  ['01', 'Posez votre source de vérité', 'Créez vos biens, locataires et documents importants dans un espace partagé.'],
+  ['02', "Laissez l'IA nettoyer le flux", 'Les messages et documents sont classés, résumés et préparés pour accélérer les décisions.'],
+  ['03', 'Agissez depuis le même endroit', 'Vous validez, répondez ou déléguez à un prestataire depuis un tableau de bord compact.'],
 ] as const;
 
 const previewRows = [
@@ -79,13 +79,13 @@ export default function LandingPage() {
         <div className="flex flex-col justify-center">
           <div className="mb-7 inline-flex w-fit items-center gap-2 rounded-full bg-brand-muted px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-brand">
             <span className="size-1.5 rounded-full bg-brand" />
-            Gestion locative assistée
+            Source de vérité locative
           </div>
           <h1 className="font-serif text-5xl leading-[1.02] tracking-[-0.04em] text-foreground sm:text-6xl lg:text-7xl">
-            Pilotez vos biens sans vous noyer dans l&apos;admin.
+            Moins d&apos;admin dispersée. Plus de clarté sur vos biens.
           </h1>
           <p className="mt-6 max-w-xl text-lg font-light leading-8 text-muted-foreground">
-            isimple réunit messages, documents, locataires et tickets dans un tableau de bord pensé pour les propriétaires et gestionnaires en France.
+            isimple réunit messages, documents, locataires et interventions dans une source de vérité pensée pour les propriétaires et gestionnaires en France.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -103,9 +103,9 @@ export default function LandingPage() {
             </Link>
           </div>
           <div className="mt-8 grid max-w-lg grid-cols-3 gap-3 text-sm">
-            <Metric value="12h" label="gagnées / mois" />
-            <Metric value="IA" label="classification" />
-            <Metric value="1" label="espace partagé" />
+            <Metric value="1" label="source de vérité" />
+            <Metric value="IA" label="tri et extraction" />
+            <Metric value="0" label="données éparpillées" />
           </div>
         </div>
 
@@ -116,10 +116,10 @@ export default function LandingPage() {
         <div className="mb-10 grid gap-6 lg:grid-cols-[0.8fr_1fr] lg:items-end">
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-brand">+ Fonctionnalités</p>
-            <h2 className="font-serif text-4xl leading-tight tracking-tight">Moins d&apos;onglets, plus de décisions.</h2>
+            <h2 className="font-serif text-4xl leading-tight tracking-tight">Tout ce qui compte, au même endroit.</h2>
           </div>
           <p className="max-w-2xl text-muted-foreground">
-            Le design produit priorise les files à traiter, les informations extraites et les actions rapides. L&apos;objectif n&apos;est pas de tout automatiser, mais de réduire la friction.
+            Le produit priorise les files à traiter, les informations extraites et les actions rapides. L&apos;objectif n&apos;est pas de tout automatiser, mais de supprimer les angles morts.
           </p>
         </div>
         <div className="grid overflow-hidden rounded-xl border bg-border md:grid-cols-3">
@@ -138,9 +138,9 @@ export default function LandingPage() {
       <section id="workflow" className="mx-auto grid max-w-6xl gap-12 border-t px-5 py-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-12">
         <div>
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-brand">+ Méthode</p>
-          <h2 className="font-serif text-4xl leading-tight tracking-tight">Un workflow simple pour une gestion propre.</h2>
+          <h2 className="font-serif text-4xl leading-tight tracking-tight">Un workflow simple, mais assez puissant pour grandir.</h2>
           <p className="mt-5 text-muted-foreground">
-            Le produit reste volontairement compact: capturer, qualifier, agir, archiver.
+            Le produit reste volontairement compact: capturer, qualifier, agir, archiver. Le socle IA reste agnostique pour évoluer avec les meilleurs modèles.
           </p>
         </div>
         <div className="divide-y border-y">
@@ -161,7 +161,7 @@ export default function LandingPage() {
           <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-brand">Prêt à tester</p>
-              <h2 className="font-serif text-4xl leading-tight tracking-tight">Créez votre espace et importez vos premiers documents.</h2>
+              <h2 className="font-serif text-4xl leading-tight tracking-tight">Créez votre espace, ajoutez un bien, importez un document.</h2>
             </div>
             <Link
               href="/signup"
@@ -185,7 +185,7 @@ export default function LandingPage() {
                 <span className="font-serif text-lg">isimple</span>
               </Link>
               <p className="max-w-64 text-sm leading-6 text-muted-foreground">
-                La gestion immobilière propulsée par l&apos;intelligence artificielle. Conçu pour les professionnels de l&apos;immobilier.
+                La gestion locative propulsée par l&apos;IA. Une source de vérité claire pour les professionnels de l&apos;immobilier.
               </p>
             </div>
             <FooterColumn
@@ -230,7 +230,7 @@ export default function LandingPage() {
 
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-[-0.16em] left-[max(20px,calc((100vw-72rem)/2))] select-none whitespace-nowrap font-serif text-[clamp(132px,28vw,480px)] leading-none tracking-[-0.08em] text-[#ecebe8]"
+          className="pointer-events-none absolute bottom-[-0.12em] left-[max(20px,calc((100vw-72rem)/2))] select-none whitespace-nowrap font-serif text-[clamp(104px,20vw,360px)] leading-none tracking-[-0.08em] text-[#ecebe8]"
         >
           isimple
         </div>

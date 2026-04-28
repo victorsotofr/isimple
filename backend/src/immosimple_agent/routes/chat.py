@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from ..graphs.inbox import inbox_graph
 from ..models.requests import ChatRequest
 from ..models.responses import ChatResponse
+from ..services.ai import AIConfigError
 
 router = APIRouter(tags=["chat"])
 
@@ -25,15 +26,23 @@ async def chat(request: ChatRequest) -> ChatResponse:
             "system_context": request.system_context,
             "tenant_context": "",
             "reply": "",
+            "provider": "",
             "model": "",
             "input_tokens": 0,
             "output_tokens": 0,
+            "ai_provider": request.ai_provider,
+            "ai_model": request.ai_model,
+            "latency_ms": 0,
         })
         return ChatResponse(
             reply=result["reply"],
+            provider=result["provider"],
             model=result["model"],
             input_tokens=result["input_tokens"],
             output_tokens=result["output_tokens"],
+            latency_ms=result["latency_ms"],
         )
+    except AIConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

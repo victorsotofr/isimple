@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Building2, Home, Car, Store, Sparkles, ChevronRight } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { Plus, Building2, Home, Car, Store, Sparkles, ChevronRight, FileText, Upload } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -42,7 +43,9 @@ const TYPE_ICONS: Record<Lot['type'], React.ElementType> = {
 export function LotsView() {
   const { t } = useLanguage();
   const { activeWorkspace } = useWorkspace();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+  const onboarding = searchParams.get('onboarding') === '1';
 
   const [lots, setLots] = useState<Lot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,6 +115,39 @@ export function LotsView() {
 
   return (
     <div className="space-y-6">
+      {onboarding && (
+        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-4">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-muted text-brand">
+                <Building2 className="size-5" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">
+                  Étape 2 sur 3
+                </p>
+                <h2 className="mt-1 text-lg font-semibold">Ajoutez votre premier bien</h2>
+                <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                  Un bien devient le point d’ancrage pour les locataires, documents, messages et tickets.
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button size="sm" onClick={handleOpen}>
+                <Plus className="size-4 mr-1" />
+                Ajouter un bien
+              </Button>
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/documents/upload?onboarding=1">
+                  <Upload className="size-4 mr-1" />
+                  Passer à l’import
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">{t.lots.title}</h1>
         <Button size="sm" onClick={handleOpen}>
@@ -123,11 +159,18 @@ export function LotsView() {
       {loading ? (
         <div className="text-sm text-muted-foreground">{t.common.loading}</div>
       ) : lots.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
-          <Building2 className="size-10 opacity-30" />
-          <p className="text-sm">{t.lots.empty}</p>
-          <Button variant="outline" size="sm" onClick={handleOpen}>
-            <Plus className="size-4 mr-2" />{t.lots.add}
+        <div className="rounded-2xl border bg-card p-8 text-center">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-muted">
+            <FileText className="size-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium text-foreground">{t.lots.empty}</p>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+            Ajoutez une adresse, un loyer et quelques détails. Les documents importés pourront ensuite
+            être rattachés automatiquement.
+          </p>
+          <Button variant="outline" size="sm" onClick={handleOpen} className="mt-4">
+            <Plus className="size-4 mr-2" />
+            {t.lots.add}
           </Button>
         </div>
       ) : (

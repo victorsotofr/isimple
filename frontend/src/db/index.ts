@@ -1,5 +1,6 @@
 export type {
   Database,
+  Json,
   Workspace, WorkspaceMember, WorkspaceInvitation,
   Lot, Tenant, Lease, Conversation, Message, Document, DocumentTenant,
   WorkspaceRole, InvitationStatus, LotType, LeaseStatus,

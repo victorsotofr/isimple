@@ -89,6 +89,7 @@ function UploadContent() {
   const searchParams = useSearchParams();
   const reviewId = searchParams.get('review');
   const presetLotId = searchParams.get('lot_id');
+  const onboarding = searchParams.get('onboarding') === '1';
   const { activeWorkspace } = useWorkspace();
   const supabase = createClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -645,6 +646,26 @@ function UploadContent() {
 
   return (
     <div className="max-w-xl space-y-6">
+      {onboarding && (
+        <div className="rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="flex gap-4">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-muted text-brand">
+              <FileText className="size-5" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-brand">
+                Étape 3 sur 3
+              </p>
+              <h2 className="mt-1 text-lg font-semibold">Importez votre premier document</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                Déposez un bail, une quittance ou une facture. isimple extrait les champs utiles
+                et prépare les rattachements au bien et aux locataires.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-xl font-semibold">Importer des documents</h1>
 
       <div

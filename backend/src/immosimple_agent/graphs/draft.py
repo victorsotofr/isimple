@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import json
 from typing import TypedDict
 
-from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 
-from ..services.ai import MODEL, SYSTEM_PROMPT
+from ..services.ai import SYSTEM_PROMPT, generate_json
 from ..tools.supabase_tools import fetch_tenant_context
 
 TONE_LABELS = {
@@ -27,6 +24,11 @@ class DraftState(TypedDict):
     tenant_context: str
     draft: str
     final_subject: str
+    ai_provider: str | None
+    ai_model: str | None
+    provider: str
+    model: str
+    latency_ms: int
 
 
 async def node_fetch_context(state: DraftState) -> dict:
@@ -35,8 +37,6 @@ async def node_fetch_context(state: DraftState) -> dict:
 
 
 async def node_generate_draft(state: DraftState) -> dict:
-    llm = ChatAnthropic(model=MODEL, max_tokens=1024)
-
     tone_label = TONE_LABELS.get(state["tone"], "formel et professionnel")
     recipient = f" adressé à {state['recipient_name']}" if state.get("recipient_name") else ""
 
@@ -57,19 +57,20 @@ async def node_generate_draft(state: DraftState) -> dict:
     if state.get("tenant_context"):
         system_parts.append(f"## Contexte du locataire\n{state['tenant_context']}")
 
-    response = await llm.ainvoke([
-        SystemMessage(content="\n\n".join(system_parts)),
-        HumanMessage(content=user_prompt),
-    ])
-
-    raw = response.content if isinstance(response.content, str) else str(response.content)
-    if raw.strip().startswith("```"):
-        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-
-    data = json.loads(raw)
+    data, ai_result = await generate_json(
+        "\n\n".join(system_parts),
+        user_prompt,
+        provider=state.get("ai_provider"),
+        model=state.get("ai_model"),
+        max_tokens=1024,
+        operation="draft",
+    )
     return {
         "draft": data.get("draft", ""),
         "final_subject": data.get("subject", state["subject"]),
+        "provider": ai_result.provider,
+        "model": ai_result.model,
+        "latency_ms": ai_result.latency_ms,
     }
 
 

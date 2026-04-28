@@ -1,92 +1,124 @@
-# ImmoSimple — Gestion locative moderne
+# isimple
 
-Landing page et liste d'attente pour ImmoSimple, un outil de gestion locative destiné aux propriétaires en France.
+AI-native SaaS for rental-property operations in France. The product goal is simple: one clear source of truth for properties, tenants, documents, messages, and interventions.
 
-## Prérequis
+## Stack
 
-- Node.js 18+
-- pnpm
+- `frontend/`: Next.js 16 App Router, React 19, TypeScript, Tailwind CSS v4, shadcn-style UI components.
+- `backend/`: FastAPI agent service with LangGraph/LangChain, provider-agnostic LLM calls, and safe AI observability logs.
+- `Supabase`: Auth, Postgres, RLS, file storage, and local seed data.
+- `Vercel`: frontend hosting.
+- `Railway`: recommended backend hosting for the FastAPI agent.
 
-## Installation
+## Local Setup
+
+Requirements:
+
+- Node.js 22+
+- pnpm 10+
+- Python 3.12+
+- `uv`
+
+Install dependencies:
 
 ```bash
 pnpm install
+pnpm --dir frontend install
+cd backend && uv sync
 ```
 
-## Configuration locale
-
-1. Copiez `.env.example` en `.env.local` :
+Create env files:
 
 ```bash
-cp .env.example .env.local
+cp frontend/.env.example frontend/.env.local
+cp backend/.env.example backend/.env
 ```
 
-2. Remplissez les variables d'environnement :
+Fill the Supabase values in both files. Put LLM keys only in `backend/.env`.
 
-- **`KV_REST_API_URL`** / **`KV_REST_API_TOKEN`** : créez une base Upstash Redis via le dashboard Vercel (Storage → Create → KV) ou directement sur [upstash.com](https://upstash.com)
-- **`RESEND_API_KEY`** : créez un compte sur [resend.com](https://resend.com) et générez une clé API. En mode test, les emails sont envoyés uniquement à l'adresse du compte Resend.
-- **`OWNER_EMAIL`** : l'email qui recevra les notifications d'inscription
-- **`NEXT_PUBLIC_SITE_URL`** : `http://localhost:3000` en local
-
-## Développement
+Run the full app:
 
 ```bash
 pnpm dev
 ```
 
-Le site est disponible sur [http://localhost:3000](http://localhost:3000).
+Local URLs:
 
-## Déploiement
+- Frontend: `http://localhost:3000`
+- Backend healthcheck: `http://localhost:8000/health`
+- Backend API docs: `http://localhost:8000/docs`
+
+Seed demo data:
 
 ```bash
-vercel deploy
+pnpm seed
 ```
 
-Ou connectez le repo à Vercel pour un déploiement automatique à chaque push.
+Demo credentials after seeding:
 
-## Modifier le contenu
+- Email: `demo@immosimple.fr`
+- Password: `Demo1234!`
 
-| Section | Fichier |
-|---------|---------|
-| Hero (titre, sous-titre) | `components/Hero.tsx` |
-| Problèmes | `components/Problem.tsx` |
-| Fonctionnalités | `components/Features.tsx` |
-| Tarifs | `components/Pricing.tsx` |
-| Formulaire | `components/WaitlistForm.tsx` |
-| Footer | `components/Footer.tsx` |
-| Mentions légales | `app/mentions-legales/page.tsx` |
-| Politique de confidentialité | `app/politique-confidentialite/page.tsx` |
-| Métadonnées SEO | `app/layout.tsx` |
+## AI Providers
 
-## Changer le nom de marque
+The backend supports:
 
-Recherchez « ImmoSimple » dans le projet et remplacez-le par votre nom de marque. Fichiers concernés :
+- Anthropic: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`
+- OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`
+- Gemini: `GEMINI_API_KEY`, `GEMINI_MODEL`
 
-- `components/Nav.tsx`
-- `components/Hero.tsx`
-- `components/Pricing.tsx`
-- `components/Footer.tsx`
-- `app/layout.tsx`
-- `app/mentions-legales/page.tsx`
-- `app/politique-confidentialite/page.tsx`
-- `app/api/waitlist/route.ts`
+Workspace admins can choose the active provider/model in `Settings -> Intelligence artificielle`.
 
-## Consulter les inscriptions
+If no workspace setting exists, the backend uses `AI_PROVIDER` and the matching default model.
 
-Les inscriptions sont stockées dans Vercel KV (Upstash Redis) :
+AI logs include provider, model, operation, latency, and token counts when available. Secrets are never logged.
 
-- **Compteur** : clé `waitlist_count`
-- **Liste** : clé `waitlist_emails` (liste JSON)
+## Deployment
 
-Consultez-les via le [dashboard Vercel Storage](https://vercel.com/dashboard) ou le [dashboard Upstash](https://console.upstash.com).
+Frontend on Vercel:
 
-## Stack technique
+- Root Directory: `frontend`
+- Build Command: `pnpm run build`
+- Install Command: `pnpm install`
+- Output Directory: leave default
+- Env: copy values from `frontend/.env.example`
+- `AGENT_URL` must point to the Railway backend URL, for example `https://your-agent.up.railway.app`
 
-- Next.js (App Router)
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-- Upstash Redis (Vercel KV)
-- Resend (emails)
-- Vercel Analytics
-- React Hook Form + Zod
+Backend on Railway:
+
+- Create a Railway service from the same GitHub repo.
+- Set Root Directory to `backend`.
+- Railway will use `backend/railway.json`.
+- Env: copy values from `backend/.env.example`.
+- Healthcheck path: `/health`.
+
+Supabase:
+
+- Apply migrations from `frontend/supabase/migrations`.
+- Enable email/password auth.
+- Configure storage policies for documents before using uploads in production.
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` to the browser. It is server-only.
+
+## Useful Commands
+
+```bash
+pnpm dev
+pnpm lint
+pnpm typecheck
+pnpm build
+pnpm seed
+pnpm --dir frontend dev
+cd backend && uv run uvicorn src.immosimple_agent.main:app --reload --port 8000
+```
+
+## Product Direction
+
+isimple is an AI-native SaaS. Keep new features model-agnostic by routing LLM calls through the backend provider abstraction instead of importing model SDKs directly in UI code.
+
+Short-term product flow:
+
+1. Create workspace.
+2. Add first property.
+3. Upload first document.
+4. Use inbox classification and AI drafts.
+5. Convert operational requests into tickets.
