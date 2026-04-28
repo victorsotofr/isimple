@@ -21,7 +21,7 @@ SUPPORTED_PROVIDERS: tuple[AIProviderName, ...] = ("anthropic", "openai", "gemin
 
 DEFAULT_MODELS: dict[AIProviderName, str] = {
     "anthropic": "claude-sonnet-4-20250514",
-    "openai": "gpt-4o-mini",
+    "openai": "gpt-4.1-mini",
     "gemini": "gemini-2.5-flash",
 }
 

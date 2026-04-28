@@ -24,7 +24,7 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: gpt-4o-mini
+        value: gpt-4.1-mini
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL

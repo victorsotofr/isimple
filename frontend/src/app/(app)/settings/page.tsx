@@ -52,7 +52,7 @@ const AI_PROVIDERS: Array<{
     value: 'openai',
     label: 'OpenAI',
     description: 'Bon choix généraliste pour classification, brouillons et coûts maîtrisés.',
-    defaultModel: 'gpt-4o-mini',
+    defaultModel: 'gpt-4.1-mini',
   },
   {
     value: 'gemini',
