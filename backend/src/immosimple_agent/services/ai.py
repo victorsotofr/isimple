@@ -10,31 +10,27 @@ from typing import Any, Literal
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger("immosimple_agent.ai")
 
-AIProviderName = Literal["anthropic", "openai", "gemini"]
+AIProviderName = Literal["anthropic", "openai"]
 
-SUPPORTED_PROVIDERS: tuple[AIProviderName, ...] = ("anthropic", "openai", "gemini")
+SUPPORTED_PROVIDERS: tuple[AIProviderName, ...] = ("anthropic", "openai")
 
 DEFAULT_MODELS: dict[AIProviderName, str] = {
     "anthropic": "claude-sonnet-4-20250514",
     "openai": "gpt-4.1-mini",
-    "gemini": "gemini-2.5-flash",
 }
 
 ENV_KEYS: dict[AIProviderName, str] = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai": "OPENAI_API_KEY",
-    "gemini": "GEMINI_API_KEY",
 }
 
 MODEL_ENV_KEYS: dict[AIProviderName, str] = {
     "anthropic": "ANTHROPIC_MODEL",
     "openai": "OPENAI_MODEL",
-    "gemini": "GEMINI_MODEL",
 }
 
 SYSTEM_PROMPT = """\
@@ -121,15 +117,6 @@ def get_chat_model(
         return ChatAnthropic(model=config.model, max_tokens=max_tokens), config
     if config.provider == "openai":
         return ChatOpenAI(model=config.model, max_tokens=max_tokens, temperature=0.2), config
-    if config.provider == "gemini":
-        return (
-            ChatGoogleGenerativeAI(
-                model=config.model,
-                max_output_tokens=max_tokens,
-                temperature=0.2,
-            ),
-            config,
-        )
     raise AIConfigError(f"Provider IA non supporté: {config.provider}.")
 
 

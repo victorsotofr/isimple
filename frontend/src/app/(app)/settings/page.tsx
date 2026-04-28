@@ -34,7 +34,7 @@ const teamItems = [
   { icon: Users, label: 'Membres', description: 'Inviter et gérer les membres' },
 ];
 
-type AIProvider = 'anthropic' | 'openai' | 'gemini';
+type AIProvider = 'anthropic' | 'openai';
 
 const AI_PROVIDERS: Array<{
   value: AIProvider;
@@ -53,12 +53,6 @@ const AI_PROVIDERS: Array<{
     label: 'OpenAI',
     description: 'Bon choix généraliste pour classification, brouillons et coûts maîtrisés.',
     defaultModel: 'gpt-4.1-mini',
-  },
-  {
-    value: 'gemini',
-    label: 'Gemini',
-    description: 'Option Google, utile pour élargir les tests multi-providers.',
-    defaultModel: 'gemini-2.5-flash',
   },
 ];
 

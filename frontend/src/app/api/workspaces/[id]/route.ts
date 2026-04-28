@@ -5,7 +5,7 @@ import { getServiceSupabase } from '@/lib/supabase';
 import { z } from 'zod';
 
 const aiSettingsSchema = z.object({
-  provider: z.enum(['anthropic', 'openai', 'gemini']).optional(),
+  provider: z.enum(['anthropic', 'openai']).optional(),
   model: z.string().max(120).optional(),
 }).optional();
 

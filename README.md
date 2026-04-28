@@ -65,7 +65,6 @@ The backend supports:
 
 - Anthropic: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`
 - OpenAI: `OPENAI_API_KEY`, `OPENAI_MODEL`
-- Gemini: `GEMINI_API_KEY`, `GEMINI_MODEL`
 
 Workspace admins can choose the active provider/model in `Settings -> Intelligence artificielle`.
 
