@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { Plus, Building2, Home, Car, Store, Sparkles, ChevronRight, FileText, Upload } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Plus, Building2, Home, Car, Store, Sparkles, ChevronRight, FileText, Upload, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -43,6 +43,7 @@ const TYPE_ICONS: Record<Lot['type'], React.ElementType> = {
 export function LotsView() {
   const { t } = useLanguage();
   const { activeWorkspace } = useWorkspace();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
   const onboarding = searchParams.get('onboarding') === '1';
@@ -52,6 +53,11 @@ export function LotsView() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAI, setShowAI] = useState(false);
+  const [intakeFiles, setIntakeFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [uploadingDocs, setUploadingDocs] = useState(false);
+  const [intakeError, setIntakeError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<LotForm>({
     resolver: zodResolver(lotSchema),
@@ -86,9 +92,57 @@ export function LotsView() {
     setShowAI(false);
   };
 
+  const addIntakeFiles = (incoming: File[]) => {
+    const accepted = incoming.filter(f => f.type === 'application/pdf' || f.type.startsWith('image/'));
+    setIntakeFiles(prev => [...prev, ...accepted]);
+    setIntakeError('');
+  };
+
+  const removeIntakeFile = (idx: number) => {
+    setIntakeFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const uploadIntakeDocuments = async (lotId?: string): Promise<string[]> => {
+    if (!activeWorkspace || intakeFiles.length === 0) return [];
+    const docIds: string[] = [];
+    for (const file of intakeFiles) {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('workspace_id', activeWorkspace.id);
+      fd.append('source', lotId ? 'property_create' : 'property_ai_intake');
+      if (lotId) fd.append('lot_id', lotId);
+      const res = await fetch('/api/documents/upload', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `Impossible d'importer ${file.name}`);
+      }
+      const data = await res.json();
+      if (data.id) docIds.push(data.id as string);
+    }
+    return docIds;
+  };
+
+  const handleAnalyzeDocumentsOnly = async () => {
+    if (!activeWorkspace || intakeFiles.length === 0) return;
+    setUploadingDocs(true);
+    setIntakeError('');
+    try {
+      const docIds = await uploadIntakeDocuments();
+      setOpen(false);
+      setShowAI(false);
+      setIntakeFiles([]);
+      router.push(docIds[0] ? `/documents/upload?review=${docIds[0]}` : '/documents');
+    } catch (e) {
+      setIntakeError(e instanceof Error ? e.message : 'Erreur lors de l’import');
+    } finally {
+      setUploadingDocs(false);
+    }
+  };
+
   const onSubmit = async (values: LotForm) => {
     if (!activeWorkspace) return;
     setSaving(true);
+    setIntakeError('');
     const { data } = await supabase
       .from('lots')
       .insert({
@@ -104,14 +158,41 @@ export function LotsView() {
       .select()
       .single();
 
-    if (data) setLots(prev => [data as Lot, ...prev]);
+    if (data) {
+      setLots(prev => [data as Lot, ...prev]);
+      if (intakeFiles.length > 0) {
+        try {
+          setUploadingDocs(true);
+          const docIds = await uploadIntakeDocuments((data as Lot).id);
+          setOpen(false);
+          setShowAI(false);
+          setIntakeFiles([]);
+          form.reset();
+          router.push(docIds[0] ? `/documents/upload?review=${docIds[0]}` : `/lots/${(data as Lot).id}`);
+          return;
+        } catch (e) {
+          setIntakeError(e instanceof Error ? e.message : 'Erreur lors de l’import');
+          setSaving(false);
+          setUploadingDocs(false);
+          return;
+        }
+      }
+    }
     setSaving(false);
+    setUploadingDocs(false);
     setOpen(false);
     setShowAI(false);
+    setIntakeFiles([]);
     form.reset();
   };
 
-  const handleOpen = () => { setShowAI(false); form.reset(); setOpen(true); };
+  const handleOpen = () => {
+    setShowAI(true);
+    setIntakeFiles([]);
+    setIntakeError('');
+    form.reset();
+    setOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -210,86 +291,189 @@ export function LotsView() {
       )}
 
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setShowAI(false); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              {t.lots.add}
-              {!showAI && (
+        <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
+          <div className="grid max-h-[92vh] lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="border-b bg-muted/25 p-6 lg:border-b-0 lg:border-r">
+              <DialogHeader>
+                <DialogTitle className="text-2xl">Créer ou enrichir un bien</DialogTitle>
+              </DialogHeader>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Déposez un bail, un état des lieux ou des justificatifs. isimple extrait les champs,
+                crée ou retrouve le bien, puis prépare les locataires et documents à réviser.
+              </p>
+
+              <div
+                className={`mt-6 rounded-2xl border-2 border-dashed bg-background p-6 text-center transition-colors ${
+                  dragging ? 'border-brand bg-brand-muted' : 'border-border hover:border-brand/50'
+                }`}
+                onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setDragging(false);
+                  addIntakeFiles(Array.from(e.dataTransfer.files));
+                }}
+                onClick={() => inputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+              >
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".pdf,image/*"
+                  multiple
+                  className="hidden"
+                  onChange={e => {
+                    addIntakeFiles(Array.from(e.target.files ?? []));
+                    if (inputRef.current) inputRef.current.value = '';
+                  }}
+                />
+                <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-foreground text-background">
+                  <Upload className="size-5" />
+                </div>
+                <p className="mt-4 text-sm font-semibold">
+                  Glissez plusieurs documents ici
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  PDF ou images. Création du bien, rattachement locataires et catégorisation en une seule passe.
+                </p>
+              </div>
+
+              {intakeFiles.length > 0 && (
+                <div className="mt-4 rounded-xl border bg-background">
+                  {intakeFiles.map((file, index) => (
+                    <div key={`${file.name}-${index}`} className="flex items-center gap-3 border-b px-3 py-2 last:border-b-0">
+                      <FileText className="size-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{file.name}</p>
+                        <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(1)} Mo</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); removeIntakeFile(index); }}
+                        className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        aria-label="Retirer"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-5 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                <div className="rounded-xl border bg-background p-3">
+                  <CheckCircle2 className="mb-2 size-4 text-emerald-600" />
+                  Détecte le type de document
+                </div>
+                <div className="rounded-xl border bg-background p-3">
+                  <CheckCircle2 className="mb-2 size-4 text-emerald-600" />
+                  Crée ou rapproche le bien
+                </div>
+                <div className="rounded-xl border bg-background p-3">
+                  <CheckCircle2 className="mb-2 size-4 text-emerald-600" />
+                  Prépare la revue humaine
+                </div>
+              </div>
+
+              {intakeError && <p className="mt-3 text-xs text-destructive">{intakeError}</p>}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-5 w-full"
+                disabled={intakeFiles.length === 0 || uploadingDocs}
+                onClick={handleAnalyzeDocumentsOnly}
+              >
+                {uploadingDocs ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Sparkles className="mr-2 size-4" />}
+                Analyser les documents sans saisie manuelle
+              </Button>
+            </div>
+
+            <form onSubmit={form.handleSubmit(onSubmit)} className="max-h-[92vh] space-y-5 overflow-y-auto p-6">
+              <div>
+                <h3 className="text-sm font-semibold">Informations du bien</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Optionnel si vous partez des documents. Utile pour verrouiller le bien avant l’analyse.
+                </p>
+              </div>
+
+              {showAI ? (
+                <SmartFillPanel
+                  type="lot"
+                  onFill={handleAIFill}
+                  onClose={() => setShowAI(false)}
+                />
+              ) : (
                 <button
                   type="button"
                   onClick={() => setShowAI(true)}
-                  className="flex items-center gap-1 text-xs font-normal text-violet-600 hover:text-violet-700 transition-colors"
+                  className="flex w-full items-center justify-between rounded-xl border bg-brand-muted px-4 py-3 text-left text-sm font-medium text-brand transition-colors hover:border-brand/40"
                 >
-                  <Sparkles className="size-3" />
-                  Remplir avec l&apos;IA
+                  <span className="inline-flex items-center gap-2">
+                    <Sparkles className="size-4" />
+                    Décrire le bien à l&apos;IA
+                  </span>
+                  <ChevronRight className="size-4" />
                 </button>
               )}
-            </DialogTitle>
-          </DialogHeader>
 
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {showAI && (
-              <SmartFillPanel
-                type="lot"
-                onFill={handleAIFill}
-                onClose={() => setShowAI(false)}
-              />
-            )}
-
-            <div className="space-y-2">
-              <Label>{t.lots.address}</Label>
-              <Input placeholder="12 rue de la Paix" {...form.register('address')} />
-              {form.formState.errors.address && (
-                <p className="text-xs text-destructive">{form.formState.errors.address.message}</p>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>{t.lots.city}</Label>
-                <Input placeholder="Paris" {...form.register('city')} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t.lots.postalCode}</Label>
-                <Input placeholder="75001" {...form.register('postal_code')} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>{t.lots.type}</Label>
-                <select
-                  {...form.register('type')}
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                >
-                  {(['apartment','house','studio','parking','commercial','other'] as const).map(v => (
-                    <option key={v} value={v}>{t.lots.types[v]}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>{t.lots.area}</Label>
-                <Input type="number" step="0.01" placeholder="45" {...form.register('area_m2')} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>{t.lots.rent} (€)</Label>
-                <Input type="number" step="0.01" placeholder="800" {...form.register('rent_amount')} />
-                {form.formState.errors.rent_amount && (
-                  <p className="text-xs text-destructive">{form.formState.errors.rent_amount.message}</p>
+                <Label>{t.lots.address}</Label>
+                <Input placeholder="12 rue de la Paix" {...form.register('address')} />
+                {form.formState.errors.address && (
+                  <p className="text-xs text-destructive">{form.formState.errors.address.message}</p>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label>{t.lots.charges} (€)</Label>
-                <Input type="number" step="0.01" placeholder="80" {...form.register('charges_amount')} />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>{t.lots.city}</Label>
+                  <Input placeholder="Paris" {...form.register('city')} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t.lots.postalCode}</Label>
+                  <Input placeholder="75001" {...form.register('postal_code')} />
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t.common.cancel}</Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? t.common.loading : t.common.create}
-              </Button>
-            </DialogFooter>
-          </form>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>{t.lots.type}</Label>
+                  <select
+                    {...form.register('type')}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    {(['apartment','house','studio','parking','commercial','other'] as const).map(v => (
+                      <option key={v} value={v}>{t.lots.types[v]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t.lots.area}</Label>
+                  <Input type="number" step="0.01" placeholder="45" {...form.register('area_m2')} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>{t.lots.rent} (€)</Label>
+                  <Input type="number" step="0.01" placeholder="800" {...form.register('rent_amount')} />
+                  {form.formState.errors.rent_amount && (
+                    <p className="text-xs text-destructive">{form.formState.errors.rent_amount.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>{t.lots.charges} (€)</Label>
+                  <Input type="number" step="0.01" placeholder="80" {...form.register('charges_amount')} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>{t.common.cancel}</Button>
+                <Button type="submit" disabled={saving || uploadingDocs}>
+                  {saving || uploadingDocs ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                  {saving || uploadingDocs ? 'Création en cours…' : intakeFiles.length > 0 ? 'Créer et analyser' : t.common.create}
+                </Button>
+              </DialogFooter>
+            </form>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

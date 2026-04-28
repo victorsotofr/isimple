@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Bot, CircleDot, Mail, MessageCircle, MessageSquare, Plus, Send, Sparkles, UserRound } from 'lucide-react';
+import Link from 'next/link';
+import { Bot, CircleDot, Mail, MessageCircle, MessageSquare, Paperclip, Plus, Send, Sparkles, Upload, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,6 +51,26 @@ function agentErrorMessage(data: unknown): string {
   return 'Agent IA indisponible.';
 }
 
+function MessageContent({ content }: { content: string }) {
+  const lines = content.split('\n');
+  return (
+    <>
+      {lines.map((line, index) => {
+        const reviewPrefix = 'À réviser : ';
+        if (line.startsWith(reviewPrefix)) {
+          const href = line.slice(reviewPrefix.length).trim();
+          return (
+            <Link key={`${line}-${index}`} href={href} className="mt-1 block font-medium underline underline-offset-4">
+              Ouvrir la revue du document
+            </Link>
+          );
+        }
+        return <span key={`${line}-${index}`} className="block">{line}</span>;
+      })}
+    </>
+  );
+}
+
 export function InboxView() {
   const { t } = useLanguage();
   const { activeWorkspace } = useWorkspace();
@@ -68,6 +89,8 @@ export function InboxView() {
   const [creating, setCreating] = useState(false);
   const [aiError, setAiError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
 
   useEffect(() => {
     if (!activeWorkspace) return;
@@ -247,6 +270,48 @@ export function InboxView() {
     setCreating(false);
   }
 
+  async function handleConversationDocument(file: File | undefined) {
+    if (!file || !selected || !activeWorkspace) return;
+    if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
+      setAiError('Format non supporté. Utilisez un PDF ou une image.');
+      return;
+    }
+
+    setUploadingDocument(true);
+    setAiError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('workspace_id', activeWorkspace.id);
+      fd.append('source', 'inbox');
+      fd.append('conversation_id', selected.id);
+      if (selected.tenant_id) fd.append('tenant_id', selected.tenant_id);
+
+      const res = await fetch('/api/documents/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Import impossible');
+
+      const reviewPath = `/documents/upload?review=${data.id}`;
+      await supabase.from('messages').insert({
+        conversation_id: selected.id,
+        workspace_id: activeWorkspace.id,
+        content: `Document ajouté : ${file.name}\nÀ réviser : ${reviewPath}`,
+        role: 'manager',
+      });
+      await supabase
+        .from('conversations')
+        .update({ category: 'document', status: 'pending' })
+        .eq('id', selected.id);
+      setSelected(prev => prev ? { ...prev, category: 'document', status: 'pending' } : prev);
+      setConversations(prev => prev.map(c => c.id === selected.id ? { ...c, category: 'document', status: 'pending' } : c));
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : 'Import impossible');
+    } finally {
+      setUploadingDocument(false);
+      if (documentInputRef.current) documentInputRef.current.value = '';
+    }
+  }
+
   const tenantName = (c: ConversationWithTenant) =>
     c.tenants ? `${c.tenants.first_name} ${c.tenants.last_name}` : 'Inconnu';
 
@@ -405,7 +470,9 @@ export function InboxView() {
                         msg.role === 'tenant' && 'rounded-bl-sm border-border bg-card',
                         isAi && 'rounded-br-sm border-brand/20 bg-brand-muted text-foreground',
                       )}>
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                        <div className="whitespace-pre-wrap">
+                          <MessageContent content={msg.content} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -437,6 +504,13 @@ export function InboxView() {
                 </span>
               </div>
               <div className="flex gap-2">
+                <input
+                  ref={documentInputRef}
+                  type="file"
+                  accept=".pdf,image/*"
+                  className="hidden"
+                  onChange={e => handleConversationDocument(e.target.files?.[0])}
+                />
                 <textarea
                   value={compose}
                   onChange={e => setCompose(e.target.value)}
@@ -445,6 +519,16 @@ export function InboxView() {
                   className="min-h-[72px] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none"
                 />
                 <div className="flex flex-col gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => documentInputRef.current?.click()}
+                    disabled={uploadingDocument}
+                    className="h-8 gap-1.5"
+                  >
+                    {uploadingDocument ? <Upload className="size-3.5 animate-pulse" /> : <Paperclip className="size-3.5" />}
+                    Document
+                  </Button>
                   <Button size="sm" variant="outline" onClick={handleAiDraft} disabled={drafting} className="h-8 gap-1.5">
                     <Sparkles className="size-3.5 text-brand" />
                     {drafting ? t.inbox.generating : t.inbox.aiDraft}

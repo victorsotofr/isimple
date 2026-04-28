@@ -23,7 +23,7 @@ Pour l'adresse du BIEN loué (pas celle du bailleur) :
 
 Retourne UNIQUEMENT du JSON valide (null ou [] si inconnu) :
 {
-  "doc_type": "bail" | "quittance" | "etat_des_lieux" | "facture" | "autre",
+  "doc_type": "bail" | "caution" | "quittance" | "etat_des_lieux" | "assurance" | "rib" | "caf" | "piece_identite" | "mandat" | "facture" | "autre",
   "tenants": [{ "first_name": string, "last_name": string, "email": string | null }],
   "landlord_last_name": string | null,
   "property_address": string | null,
@@ -85,6 +85,28 @@ function generatePlaceholderEmail(first: string, last: string): string {
   return `${slug}.${suffix}@placeholder.local`;
 }
 
+function safeFileName(name: string): string {
+  const cleaned = name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return cleaned || 'document.pdf';
+}
+
+function optionalFormValue(formData: FormData, key: string): string | null {
+  const value = formData.get(key);
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function uniqueIds(ids: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0)));
+}
+
+function safePathSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'documents';
+}
+
 export async function POST(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -105,6 +127,10 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const workspaceId = formData.get('workspace_id') as string | null;
+    const contextLotId = optionalFormValue(formData, 'lot_id');
+    const contextTenantId = optionalFormValue(formData, 'tenant_id');
+    const conversationId = optionalFormValue(formData, 'conversation_id');
+    const source = safePathSegment(optionalFormValue(formData, 'source') ?? 'documents');
 
     if (!file || !workspaceId) {
       return NextResponse.json({ error: 'Fichier ou workspace manquant' }, { status: 400 });
@@ -113,8 +139,8 @@ export async function POST(req: NextRequest) {
     const admin = getServiceSupabase();
 
     // Upload to Supabase Storage
-    const fileExt = file.name.split('.').pop() ?? 'pdf';
-    const filePath = `${workspaceId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+    const month = new Date().toISOString().slice(0, 7);
+    const filePath = `${workspaceId}/${month}/${source}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeFileName(file.name)}`;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
     const { error: uploadError } = await admin.storage
@@ -158,6 +184,21 @@ export async function POST(req: NextRequest) {
     // ---------- Match or auto-create the lot ----------
     let suggestedLotId: string | null = null;
     let createdLotId: string | null = null;
+    const reviewFlags: string[] = [];
+
+    if (contextLotId) {
+      const { data: contextLot } = await admin
+        .from('lots')
+        .select('id, address, city, postal_code, rent_amount')
+        .eq('workspace_id', workspaceId)
+        .eq('id', contextLotId)
+        .single();
+      if (contextLot) {
+        suggestedLotId = contextLot.id;
+      } else {
+        reviewFlags.push('context_lot_not_found');
+      }
+    }
 
     const propAddress = typeof extractedData.property_address === 'string' ? extractedData.property_address.trim() : '';
     const propCity = typeof extractedData.property_city === 'string' ? extractedData.property_city.trim() : '';
@@ -169,7 +210,7 @@ export async function POST(req: NextRequest) {
     const rentAmount = typeof extractedData.rent_amount === 'number' ? extractedData.rent_amount : 0;
     const chargesAmount = typeof extractedData.charges_amount === 'number' ? extractedData.charges_amount : 0;
 
-    if (propAddress) {
+    if (propAddress && !suggestedLotId) {
       const { data: allLots } = await admin
         .from('lots')
         .select('id, address, city, postal_code')
@@ -220,6 +261,9 @@ export async function POST(req: NextRequest) {
           console.warn('[documents/upload] auto-create lot failed:', lotErr);
         }
       }
+    }
+    if (propAddress && suggestedLotId) {
+      reviewFlags.push('property_address_extracted');
     }
 
     // ---------- Match or auto-create tenants ----------
@@ -298,7 +342,42 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const suggestedTenantId = suggestedTenantIds[0] ?? null;
+    if (contextTenantId) {
+      const { data: contextTenant } = await admin
+        .from('tenants')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('id', contextTenantId)
+        .single();
+      if (contextTenant && !suggestedTenantIds.includes(contextTenant.id)) {
+        suggestedTenantIds.unshift(contextTenant.id);
+      } else if (!contextTenant) {
+        reviewFlags.push('context_tenant_not_found');
+      }
+    }
+
+    if (!suggestedLotId) reviewFlags.push('missing_property_match');
+    if (suggestedTenantIds.length === 0 && dedupedExtracted.length > 0) reviewFlags.push('missing_tenant_match');
+    if ((extractedData.doc_type as string | undefined) === 'autre') reviewFlags.push('unknown_document_type');
+    if (dedupedExtracted.length > 1) reviewFlags.push('multiple_tenants_detected');
+
+    extractedData = {
+      ...extractedData,
+      _pipeline: {
+        source,
+        provider: 'anthropic',
+        parser: 'native-llm',
+        status: 'needs_review',
+        uploaded_at: new Date().toISOString(),
+        conversation_id: conversationId,
+        context_lot_id: contextLotId,
+        context_tenant_id: contextTenantId,
+        review_flags: reviewFlags,
+      },
+    };
+
+    const suggestedTenantId = uniqueIds(suggestedTenantIds)[0] ?? null;
+    const linkedTenantIds = uniqueIds(suggestedTenantIds);
 
     // Create document record
     const { data: doc, error: dbError } = await admin
@@ -322,9 +401,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Persist every matched tenant in the junction table.
-    if (suggestedTenantIds.length > 0) {
+    if (linkedTenantIds.length > 0) {
       await admin.from('document_tenants').insert(
-        suggestedTenantIds.map(tenantId => ({
+        linkedTenantIds.map(tenantId => ({
           document_id: doc.id,
           tenant_id: tenantId,
           workspace_id: workspaceId,
@@ -342,7 +421,7 @@ export async function POST(req: NextRequest) {
       signed_url: signedData?.signedUrl ?? '',
       suggested_lot_id: suggestedLotId,
       suggested_tenant_id: suggestedTenantId,
-      suggested_tenant_ids: suggestedTenantIds,
+      suggested_tenant_ids: linkedTenantIds,
       created_lot_id: createdLotId,
       created_tenant_ids: createdTenantIds,
     }, { status: 201 });

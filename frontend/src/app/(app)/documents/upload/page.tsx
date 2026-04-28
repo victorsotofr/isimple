@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { Upload, FileText, X, Loader2, CheckCircle2, UserPlus, Plus, AlertCircle, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Upload, FileText, X, Loader2, CheckCircle2, UserPlus, Plus, AlertCircle, ChevronLeft, ChevronRight, Trash2, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useWorkspace } from '@/contexts/workspace-context';
@@ -12,8 +12,14 @@ import type { Lot, Tenant } from '@/db';
 
 const DOC_TYPES = [
   { value: 'bail', label: 'Bail' },
+  { value: 'caution', label: 'Caution solidaire' },
   { value: 'quittance', label: 'Quittance de loyer' },
   { value: 'etat_des_lieux', label: 'État des lieux' },
+  { value: 'assurance', label: 'Assurance habitation' },
+  { value: 'rib', label: 'RIB' },
+  { value: 'caf', label: 'CAF' },
+  { value: 'piece_identite', label: 'Pièce d’identité' },
+  { value: 'mandat', label: 'Mandat' },
   { value: 'facture', label: 'Facture' },
   { value: 'autre', label: 'Autre' },
 ];
@@ -34,6 +40,10 @@ type ExtractedData = {
   document_date?: string | null;
   rent_amount?: number | null;
   summary?: string | null;
+  _pipeline?: {
+    source?: string | null;
+    review_flags?: string[];
+  } | null;
 };
 
 function getExtractedTenants(d: ExtractedData): ExtractedTenant[] {
@@ -59,6 +69,19 @@ function findMatchingTenant(extracted: ExtractedTenant, tenants: Tenant[]): Tena
   return tenants.find(t =>
     normalizeForMatch(t.last_name) === ln && normalizeForMatch(t.first_name) === fn
   );
+}
+
+function reviewFlagLabel(flag: string): string {
+  const labels: Record<string, string> = {
+    context_lot_not_found: 'Bien source introuvable',
+    context_tenant_not_found: 'Locataire source introuvable',
+    property_address_extracted: 'Adresse extraite',
+    missing_property_match: 'Bien à confirmer',
+    missing_tenant_match: 'Locataire à confirmer',
+    unknown_document_type: 'Type incertain',
+    multiple_tenants_detected: 'Colocation détectée',
+  };
+  return labels[flag] ?? flag.replaceAll('_', ' ');
 }
 
 type ReviewState = {
@@ -90,6 +113,7 @@ function UploadContent() {
   const reviewId = searchParams.get('review');
   const presetLotId = searchParams.get('lot_id');
   const onboarding = searchParams.get('onboarding') === '1';
+  const source = searchParams.get('source') ?? (presetLotId ? 'property_detail' : 'documents');
   const { activeWorkspace } = useWorkspace();
   const supabase = createClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -155,6 +179,25 @@ function UploadContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id, reviewId]);
 
+  useEffect(() => {
+    if (step !== 'review' || !review || pendingQueue.length < 2) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const tag = event.target instanceof HTMLElement ? event.target.tagName : '';
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+      const currentIdx = pendingQueue.findIndex(d => d.id === review.doc_id);
+      if (event.key === 'ArrowRight' && currentIdx >= 0 && currentIdx < pendingQueue.length - 1) {
+        event.preventDefault();
+        router.push(`/documents/upload?review=${pendingQueue[currentIdx + 1].id}`);
+      }
+      if (event.key === 'ArrowLeft' && currentIdx > 0) {
+        event.preventDefault();
+        router.push(`/documents/upload?review=${pendingQueue[currentIdx - 1].id}`);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [pendingQueue, review, router, step]);
+
   const addFiles = (incoming: File[]) => {
     const accepted = incoming.filter(isAcceptedFile);
     if (accepted.length === 0) return;
@@ -172,6 +215,8 @@ function UploadContent() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('workspace_id', activeWorkspace.id);
+      fd.append('source', source);
+      if (presetLotId) fd.append('lot_id', presetLotId);
       const res = await fetch('/api/documents/upload', { method: 'POST', body: fd });
       if (!res.ok) return { ok: false, error: (await res.json()).error ?? 'Erreur' };
       return { ok: true, data: await res.json() };
@@ -342,7 +387,7 @@ function UploadContent() {
     const succeeded = queue.filter(q => q.state === 'done').length;
     const failed = queue.filter(q => q.state === 'error').length;
     return (
-      <div className="max-w-xl space-y-6">
+      <div className="max-w-3xl space-y-6">
         <h1 className="text-xl font-semibold">Analyse terminée</h1>
         <div className="rounded-lg border divide-y">
           {queue.map((q, i) => <QueueRow key={i} item={q} />)}
@@ -353,7 +398,10 @@ function UploadContent() {
         </p>
         <div className="flex gap-3">
           <Button
-            onClick={() => router.push(presetLotId ? `/lots/${presetLotId}?tab=documents` : '/documents')}
+            onClick={() => {
+              const firstReady = queue.find(q => q.state === 'done' && q.doc_id);
+              router.push(firstReady?.doc_id ? `/documents/upload?review=${firstReady.doc_id}` : '/documents');
+            }}
             disabled={succeeded === 0}
             className="flex-1"
           >
@@ -446,9 +494,54 @@ function UploadContent() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-6 h-[calc(100vh-200px)]">
+        <div className="grid gap-6 lg:grid-cols-[420px_minmax(0,1fr)] h-[calc(100vh-200px)] min-h-[620px]">
           {/* Left: extracted fields */}
           <div className="space-y-4 overflow-y-auto pr-2">
+            {pendingQueue.length > 0 && (
+              <div className="rounded-lg border bg-card p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <ListChecks className="size-4 text-brand" />
+                    File de revue
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {inQueue ? `${currentIdx + 1}/${queueTotal}` : `${queueTotal}`}
+                  </span>
+                </div>
+                <div className="max-h-36 space-y-1 overflow-y-auto">
+                  {pendingQueue.map((doc, index) => (
+                    <button
+                      key={doc.id}
+                      type="button"
+                      onClick={() => doc.id !== review.doc_id && goToDoc(doc.id)}
+                      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+                        doc.id === review.doc_id ? 'bg-brand-muted text-brand' : 'hover:bg-muted'
+                      }`}
+                    >
+                      <span className="w-5 shrink-0 text-center text-[10px] text-muted-foreground">{index + 1}</span>
+                      <span className="truncate">{doc.file_name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {review.extracted._pipeline?.review_flags && review.extracted._pipeline.review_flags.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                  <AlertCircle className="size-4" />
+                  Points à vérifier
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {review.extracted._pipeline.review_flags.map(flag => (
+                    <span key={flag} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-amber-800 ring-1 ring-amber-200">
+                      {reviewFlagLabel(flag)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="rounded-lg border p-4 space-y-4">
               {review.extracted.summary && (
                 <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
@@ -628,7 +721,7 @@ function UploadContent() {
           </div>
 
           {/* Right: PDF preview */}
-          <div className="rounded-lg border overflow-hidden">
+          <div className="rounded-lg border overflow-hidden bg-muted/20">
             {review.signed_url ? (
               <iframe src={review.signed_url} className="w-full h-full" title="Aperçu du document" />
             ) : (
@@ -645,7 +738,7 @@ function UploadContent() {
   const isAnalyzing = step === 'analyzing';
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="max-w-5xl space-y-6">
       {onboarding && (
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex gap-4">
@@ -666,10 +759,21 @@ function UploadContent() {
         </div>
       )}
 
-      <h1 className="text-xl font-semibold">Importer des documents</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Importer des documents</h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Déposez tous les documents d’un bien ou d’un locataire. isimple les classe, extrait les informations,
+            rapproche les entités existantes et prépare une revue humaine.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => router.push('/documents')}>
+          Voir le coffre-fort
+        </Button>
+      </div>
 
       <div
-        className={`relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-10 text-center cursor-pointer transition-colors
+        className={`relative flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center cursor-pointer transition-colors
           ${dragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/20 hover:border-primary/50'}
           ${files.length > 0 ? 'border-green-400 bg-green-50/40' : ''}
           ${isAnalyzing ? 'pointer-events-none opacity-60' : ''}`}
@@ -693,9 +797,11 @@ function UploadContent() {
             if (inputRef.current) inputRef.current.value = '';
           }}
         />
-        <Upload className="size-7 text-muted-foreground" />
+        <div className="flex size-14 items-center justify-center rounded-2xl bg-foreground text-background">
+          <Upload className="size-6" />
+        </div>
         <div>
-          <p className="text-sm font-medium">
+          <p className="text-base font-semibold">
             {files.length === 0 ? 'Glissez un ou plusieurs documents' : 'Ajouter d\u2019autres documents'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">ou cliquez pour parcourir · PDF, image · max 50 Mo par fichier</p>

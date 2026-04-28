@@ -2,6 +2,7 @@
 // À régénérer via scripts/gen-db-types.sh après chaque migration
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type DocumentType = 'bail' | 'caution' | 'quittance' | 'etat_des_lieux' | 'assurance' | 'rib' | 'caf' | 'piece_identite' | 'mandat' | 'facture' | 'autre';
 
 export interface Database {
   public: {
@@ -236,7 +237,7 @@ export interface Database {
           workspace_id: string;
           file_name: string;
           file_path: string;
-          doc_type: 'bail' | 'quittance' | 'etat_des_lieux' | 'facture' | 'autre';
+          doc_type: DocumentType;
           status: 'pending' | 'confirmed';
           extracted_data: Json | null;
           lot_id: string | null;
@@ -249,7 +250,7 @@ export interface Database {
           workspace_id: string;
           file_name: string;
           file_path: string;
-          doc_type?: 'bail' | 'quittance' | 'etat_des_lieux' | 'facture' | 'autre';
+          doc_type?: DocumentType;
           status?: 'pending' | 'confirmed';
           extracted_data?: Json | null;
           lot_id?: string | null;
@@ -262,7 +263,7 @@ export interface Database {
           workspace_id?: string;
           file_name?: string;
           file_path?: string;
-          doc_type?: 'bail' | 'quittance' | 'etat_des_lieux' | 'facture' | 'autre';
+          doc_type?: DocumentType;
           status?: 'pending' | 'confirmed';
           extracted_data?: Json | null;
           lot_id?: string | null;

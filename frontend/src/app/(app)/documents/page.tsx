@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FileText, Upload, Eye, Pencil, Trash2, AlertCircle,
-  CheckCircle2, Loader2, Home, User, Plus,
+  CheckCircle2, Loader2, Home, User, Plus, Search, SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { useWorkspace } from '@/contexts/workspace-context';
 import { createClient } from '@/lib/supabase-browser';
 import type { Document, Lot, Tenant } from '@/db';
@@ -20,8 +21,14 @@ type DocWithRefs = Document & {
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   bail: 'Bail',
+  caution: 'Caution solidaire',
   quittance: 'Quittance',
   etat_des_lieux: 'État des lieux',
+  assurance: 'Assurance',
+  rib: 'RIB',
+  caf: 'CAF',
+  piece_identite: 'Pièce d’identité',
+  mandat: 'Mandat',
   facture: 'Facture',
   autre: 'Autre',
 };
@@ -34,6 +41,11 @@ export default function DocumentsPage() {
   const [docs, setDocs] = useState<DocWithRefs[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [previewDoc, setPreviewDoc] = useState<DocWithRefs | null>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
 
   useEffect(() => {
     if (!activeWorkspace) return;
@@ -67,14 +79,34 @@ export default function DocumentsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
 
-  const pending = useMemo(() => docs.filter(d => d.status === 'pending'), [docs]);
-  const confirmed = useMemo(() => docs.filter(d => d.status === 'confirmed'), [docs]);
+  const filteredDocs = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return docs.filter(d => {
+      const haystack = [
+        d.file_name,
+        d.doc_type,
+        d.lot?.address,
+        d.lot?.city,
+        d.tenants.map(t => `${t.first_name} ${t.last_name}`).join(' '),
+        d.summary,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return (!q || haystack.includes(q))
+        && (statusFilter === 'all' || d.status === statusFilter)
+        && (typeFilter === 'all' || d.doc_type === typeFilter);
+    });
+  }, [docs, query, statusFilter, typeFilter]);
 
-  const handleView = async (doc: Document) => {
+  const pending = useMemo(() => filteredDocs.filter(d => d.status === 'pending'), [filteredDocs]);
+  const confirmed = useMemo(() => filteredDocs.filter(d => d.status === 'confirmed'), [filteredDocs]);
+  const allPendingCount = useMemo(() => docs.filter(d => d.status === 'pending').length, [docs]);
+  const allConfirmedCount = useMemo(() => docs.filter(d => d.status === 'confirmed').length, [docs]);
+
+  const handleView = async (doc: DocWithRefs) => {
     const res = await fetch(`/api/documents/${doc.id}/url`);
     if (res.ok) {
       const { url } = await res.json();
-      window.open(url, '_blank');
+      setPreviewDoc(doc);
+      setPreviewUrl(url);
     }
   };
 
@@ -121,6 +153,58 @@ export default function DocumentsPage() {
         </Button>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <button
+          type="button"
+          onClick={() => setStatusFilter('all')}
+          className={`rounded-xl border p-4 text-left transition-colors ${statusFilter === 'all' ? 'border-foreground bg-foreground text-background' : 'bg-card hover:border-foreground/30'}`}
+        >
+          <p className="text-xs opacity-70">Tous les documents</p>
+          <p className="mt-1 text-2xl font-semibold">{docs.length}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter('pending')}
+          className={`rounded-xl border p-4 text-left transition-colors ${statusFilter === 'pending' ? 'border-amber-500 bg-amber-50' : 'bg-card hover:border-foreground/30'}`}
+        >
+          <p className="text-xs text-amber-700">À réviser</p>
+          <p className="mt-1 text-2xl font-semibold">{allPendingCount}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStatusFilter('confirmed')}
+          className={`rounded-xl border p-4 text-left transition-colors ${statusFilter === 'confirmed' ? 'border-emerald-500 bg-emerald-50' : 'bg-card hover:border-foreground/30'}`}
+        >
+          <p className="text-xs text-emerald-700">Confirmés</p>
+          <p className="mt-1 text-2xl font-semibold">{allConfirmedCount}</p>
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 md:flex-row md:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Rechercher un fichier, un bien, un locataire..."
+            className="pl-9"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="size-4 text-muted-foreground" />
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          >
+            <option value="all">Tous les types</option>
+            {Object.entries(DOC_TYPE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {loading ? (
         <p className="text-sm text-muted-foreground">Chargement…</p>
       ) : docs.length === 0 ? (
@@ -132,13 +216,19 @@ export default function DocumentsPage() {
           </Button>
         </div>
       ) : (
-        <>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
+          <div className="space-y-6">
           {pending.length > 0 && (
             <section className="space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <AlertCircle className="size-4 text-amber-600" />
-                <span>À réviser</span>
-                <span className="text-muted-foreground font-normal">· {pending.length}</span>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <AlertCircle className="size-4 text-amber-600" />
+                  <span>À réviser</span>
+                  <span className="text-muted-foreground font-normal">· {pending.length}</span>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => router.push(`/documents/upload?review=${pending[0].id}`)}>
+                  Ouvrir la revue
+                </Button>
               </div>
 
               <div className="space-y-2">
@@ -208,7 +298,42 @@ export default function DocumentsPage() {
               </div>
             </section>
           )}
-        </>
+          {filteredDocs.length === 0 && (
+            <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+              Aucun document ne correspond aux filtres.
+            </div>
+          )}
+          </div>
+
+          <aside className="hidden xl:block">
+            <div className="sticky top-6 overflow-hidden rounded-xl border bg-card">
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">
+                    {previewDoc ? previewDoc.file_name : 'Aperçu du document'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {previewDoc ? (DOC_TYPE_LABELS[previewDoc.doc_type] ?? previewDoc.doc_type) : 'Sélectionnez un document dans la liste'}
+                  </p>
+                </div>
+                {previewDoc && (
+                  <Button size="sm" variant="outline" onClick={() => router.push(`/documents/upload?review=${previewDoc.id}`)}>
+                    Réviser
+                  </Button>
+                )}
+              </div>
+              <div className="h-[640px] bg-muted/30">
+                {previewUrl ? (
+                  <iframe src={previewUrl} className="h-full w-full" title="Aperçu du document" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Aucun PDF à afficher.
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
+        </div>
       )}
     </div>
   );
