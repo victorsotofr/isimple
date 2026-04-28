@@ -8,7 +8,7 @@ AI-native SaaS for rental-property operations in France. The product goal is sim
 - `backend/`: FastAPI agent service with LangGraph/LangChain, provider-agnostic LLM calls, and safe AI observability logs.
 - `Supabase`: Auth, Postgres, RLS, file storage, and local seed data.
 - `Vercel`: frontend hosting.
-- `Railway`: recommended backend hosting for the FastAPI agent.
+- `Render`: backend hosting for the FastAPI agent.
 
 ## Local Setup
 
@@ -82,13 +82,14 @@ Frontend on Vercel:
 - Install Command: `pnpm install`
 - Output Directory: leave default
 - Env: copy values from `frontend/.env.example`
-- `AGENT_URL` must point to the Railway backend URL, for example `https://your-agent.up.railway.app`
+- `AGENT_URL` must point to the Render backend URL, for example `https://isimple-agent.onrender.com`
 
-Backend on Railway:
+Backend on Render:
 
-- Create a Railway service from the same GitHub repo.
-- Set Root Directory to `backend`.
-- Railway will use `backend/railway.json`.
+- Create a new Web Service from this GitHub repo, or use the repo-root `render.yaml` Blueprint.
+- If configuring manually, set Root Directory to `backend`.
+- Build Command: `pip install uv && uv sync --frozen --no-dev`
+- Start Command: `uv run uvicorn src.immosimple_agent.main:app --host 0.0.0.0 --port $PORT`
 - Env: copy values from `backend/.env.example`.
 - Healthcheck path: `/health`.
 
