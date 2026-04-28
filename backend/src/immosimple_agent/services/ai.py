@@ -87,7 +87,7 @@ class AIResult:
 
 
 def normalize_provider(provider: str | None) -> AIProviderName:
-    candidate = (provider or os.environ.get("AI_PROVIDER") or "anthropic").lower().strip()
+    candidate = (provider or os.environ.get("AI_PROVIDER") or "openai").lower().strip()
     if candidate not in SUPPORTED_PROVIDERS:
         allowed = ", ".join(SUPPORTED_PROVIDERS)
         raise AIConfigError(f"Provider IA invalide: {candidate}. Valeurs possibles: {allowed}.")

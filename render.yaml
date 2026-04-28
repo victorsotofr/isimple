@@ -12,7 +12,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.8
       - key: AI_PROVIDER
-        value: anthropic
+        value: openai
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
