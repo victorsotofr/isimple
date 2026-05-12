@@ -449,7 +449,7 @@ function encodeRfc2822Message({
   if (attachments.length === 0) {
     const message = [
       ...headers,
-      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Type: text/plain; charset="UTF-8"; format=flowed',
       'Content-Transfer-Encoding: 8bit',
       '',
       body,
@@ -464,7 +464,7 @@ function encodeRfc2822Message({
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',
     `--${boundary}`,
-    'Content-Type: text/plain; charset="UTF-8"',
+    'Content-Type: text/plain; charset="UTF-8"; format=flowed',
     'Content-Transfer-Encoding: 8bit',
     '',
     body,

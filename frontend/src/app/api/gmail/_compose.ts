@@ -44,6 +44,22 @@ function formValues(form: FormData, key: string) {
   return form.getAll(key).filter((value): value is string => typeof value === 'string').map(value => value.trim()).filter(Boolean);
 }
 
+function normalizeOutgoingEmailBody(value: string) {
+  return value
+    .split('\n')
+    .filter(line => !/^\s*\(?sources?\s*:/i.test(line.trim()))
+    .join('\n')
+    .split(/\n{2,}/)
+    .map(paragraph => {
+      const lines = paragraph.split('\n').map(line => line.trim()).filter(Boolean);
+      const shouldPreserveLineBreaks = lines.some(line => /^([-*•]|\d+[.)])\s+/.test(line));
+      return shouldPreserveLineBreaks ? lines.join('\n') : lines.join(' ').replace(/\s{2,}/g, ' ');
+    })
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
 function jsonStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean) : [];
 }
@@ -101,7 +117,7 @@ export async function readGmailComposeRequest(request: NextRequest): Promise<Gma
       connection_id: formValue(form, 'connection_id'),
       to: formValue(form, 'to'),
       subject: formValue(form, 'subject'),
-      body: formValue(form, 'body'),
+      body: normalizeOutgoingEmailBody(formValue(form, 'body')),
       thread_id: formValue(form, 'thread_id') || undefined,
       reply_message_id: formValue(form, 'reply_message_id') || undefined,
       references: formValue(form, 'references') || undefined,
@@ -117,7 +133,7 @@ export async function readGmailComposeRequest(request: NextRequest): Promise<Gma
     connection_id: typeof body.connection_id === 'string' ? body.connection_id.trim() : '',
     to: typeof body.to === 'string' ? body.to.trim() : '',
     subject: typeof body.subject === 'string' ? body.subject.trim() : '',
-    body: typeof body.body === 'string' ? body.body.trim() : '',
+    body: typeof body.body === 'string' ? normalizeOutgoingEmailBody(body.body) : '',
     thread_id: typeof body.thread_id === 'string' ? body.thread_id.trim() : undefined,
     reply_message_id: typeof body.reply_message_id === 'string' ? body.reply_message_id.trim() : undefined,
     references: typeof body.references === 'string' ? body.references.trim() : undefined,

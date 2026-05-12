@@ -93,6 +93,27 @@ function fmtFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
+function stripEmailSourceLines(value: string) {
+  return value
+    .split('\n')
+    .filter(line => !/^\s*\(?sources?\s*:/i.test(line.trim()))
+    .join('\n')
+    .trim();
+}
+
+function normalizeEmailParagraphs(value: string) {
+  return stripEmailSourceLines(value)
+    .split(/\n{2,}/)
+    .map(paragraph => {
+      const lines = paragraph.split('\n').map(line => line.trim()).filter(Boolean);
+      const shouldPreserveLineBreaks = lines.some(line => /^([-*•]|\d+[.)])\s+/.test(line));
+      return shouldPreserveLineBreaks ? lines.join('\n') : lines.join(' ').replace(/\s{2,}/g, ' ');
+    })
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+}
+
 function agentErrorMessage(data: unknown): string {
   if (data && typeof data === 'object') {
     const obj = data as Record<string, unknown>;
@@ -297,7 +318,7 @@ export function InboxView() {
   }
 
   function withGmailSignature(value: string) {
-    const draft = value.replace(/\[Votre Nom\]/gi, activeWorkspace?.name ?? 'Votre agence').trim();
+    const draft = normalizeEmailParagraphs(value.replace(/\[Votre Nom\]/gi, activeWorkspace?.name ?? 'Votre agence'));
     if (/cordialement|bien à vous|bonne journée/i.test(draft)) return draft;
     return `${draft}\n\n${gmailSignature()}`.trim();
   }
@@ -376,7 +397,7 @@ export function InboxView() {
     form.append('connection_id', gmailConnections[0].id);
     form.append('to', target.email);
     form.append('subject', gmailReplySubject());
-    form.append('body', gmailDraft.trim());
+    form.append('body', normalizeEmailParagraphs(gmailDraft));
     form.append('thread_id', selectedGmailThread.thread_id);
     if (target.messageId) form.append('reply_message_id', target.messageId);
     if (target.references) form.append('references', target.references);

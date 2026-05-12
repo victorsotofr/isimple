@@ -55,7 +55,7 @@ async def node_generate_draft(state: DraftState) -> dict:
         context_parts.append(
             "Contexte documentaire récupéré :\n"
             f"{state['document_context']}\n"
-            "Si tu utilises une information documentaire, indique le document source dans le brouillon."
+            "Utilise ces informations pour être précis, mais ne cite pas le nom du document source dans le message envoyé."
         )
     context_parts.append(state["context"])
 
@@ -73,7 +73,8 @@ async def node_generate_draft(state: DraftState) -> dict:
     if state.get("document_context"):
         system_parts.append(
             "## Contexte documentaire\n"
-            "N'invente pas de clause ou de date absente des sources récupérées."
+            "N'invente pas de clause ou de date absente des sources récupérées. "
+            "Ne termine jamais le brouillon par une ligne Source ou Sources."
         )
 
     data, ai_result = await generate_json(
