@@ -66,6 +66,8 @@ type GmailThread = {
 type NormalizedGmailMessage = {
   id: string;
   message_id: string;
+  rfc_message_id: string | null;
+  references: string | null;
   from_email: string | null;
   from_name: string | null;
   to_emails: string[];
@@ -301,6 +303,8 @@ function normalizeGmailMessage(message: GmailMessage, accountEmail?: string): No
   return {
     id: message.id,
     message_id: message.id,
+    rfc_message_id: headerValue(message, 'Message-ID') || null,
+    references: headerValue(message, 'References') || null,
     from_email: from.email || null,
     from_name: from.name || null,
     to_emails: to ? to.split(',').map((item) => parseAddress(item.trim()).email).filter(Boolean) : [],
@@ -352,6 +356,7 @@ export function normalizeGmailThread(
       snippet: decodeHtmlEntities(thread.snippet ?? ''),
       messages: normalizedMessages.map((message) => ({
         id: message.id,
+        rfc_message_id: message.rfc_message_id,
         labelIds: message.labels,
         received_at: message.received_at,
         direction: message.direction,
@@ -404,13 +409,40 @@ function foldBase64(value: string) {
 }
 
 function encodeAttachmentFilename(value: string) {
-  return value.replace(/["\\\r\n]/g, '_').trim() || 'attachment';
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/["\\\r\n]/g, '_')
+    .trim() || 'attachment';
 }
 
-function encodeRfc2822Message(to: string, subject: string, body: string, attachments: GmailAttachmentInput[] = []) {
+function sanitizeThreadHeader(value?: string | null) {
+  return value?.replace(/\r?\n/g, ' ').trim() || '';
+}
+
+function encodeRfc2822Message({
+  to,
+  subject,
+  body,
+  attachments = [],
+  replyToMessageId,
+  references,
+}: {
+  to: string;
+  subject: string;
+  body: string;
+  attachments?: GmailAttachmentInput[];
+  replyToMessageId?: string | null;
+  references?: string | null;
+}) {
+  const replyHeader = sanitizeThreadHeader(replyToMessageId);
+  const referencesHeader = sanitizeThreadHeader(references);
   const headers = [
     `To: ${encodeHeader(to)}`,
     `Subject: ${encodeHeader(subject)}`,
+    ...(replyHeader ? [`In-Reply-To: ${replyHeader}`] : []),
+    ...(replyHeader || referencesHeader ? [`References: ${[referencesHeader, replyHeader].filter(Boolean).join(' ')}`] : []),
     'MIME-Version: 1.0',
   ];
 
@@ -418,6 +450,7 @@ function encodeRfc2822Message(to: string, subject: string, body: string, attachm
     const message = [
       ...headers,
       'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: 8bit',
       '',
       body,
     ].join('\r\n');
@@ -461,6 +494,8 @@ export async function createGmailDraft({
   subject,
   body,
   threadId,
+  replyToMessageId,
+  references,
   attachments = [],
 }: {
   accessToken: string;
@@ -468,13 +503,15 @@ export async function createGmailDraft({
   subject: string;
   body: string;
   threadId?: string | null;
+  replyToMessageId?: string | null;
+  references?: string | null;
   attachments?: GmailAttachmentInput[];
 }) {
   return gmailRequest<{ id: string; message: { id: string; threadId: string } }>('drafts', accessToken, {
     method: 'POST',
     body: JSON.stringify({
       message: {
-        raw: encodeRfc2822Message(to, subject, body, attachments),
+        raw: encodeRfc2822Message({ to, subject, body, attachments, replyToMessageId, references }),
         ...(threadId ? { threadId } : {}),
       },
     }),
@@ -487,6 +524,8 @@ export async function sendGmailMessage({
   subject,
   body,
   threadId,
+  replyToMessageId,
+  references,
   attachments = [],
 }: {
   accessToken: string;
@@ -494,12 +533,14 @@ export async function sendGmailMessage({
   subject: string;
   body: string;
   threadId?: string | null;
+  replyToMessageId?: string | null;
+  references?: string | null;
   attachments?: GmailAttachmentInput[];
 }) {
   return gmailRequest<{ id: string; threadId: string; labelIds?: string[] }>('messages/send', accessToken, {
     method: 'POST',
     body: JSON.stringify({
-      raw: encodeRfc2822Message(to, subject, body, attachments),
+      raw: encodeRfc2822Message({ to, subject, body, attachments, replyToMessageId, references }),
       ...(threadId ? { threadId } : {}),
     }),
   });

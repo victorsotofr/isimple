@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import type { GmailAttachmentInput } from '@/lib/gmail';
+import { getServiceSupabase } from '@/lib/supabase';
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
@@ -10,6 +11,9 @@ export type GmailComposeRequestBody = {
   subject: string;
   body: string;
   thread_id?: string;
+  reply_message_id?: string;
+  references?: string;
+  document_ids: string[];
   attachments: GmailAttachmentInput[];
 };
 
@@ -36,6 +40,57 @@ async function readAttachments(form: FormData) {
   })));
 }
 
+function formValues(form: FormData, key: string) {
+  return form.getAll(key).filter((value): value is string => typeof value === 'string').map(value => value.trim()).filter(Boolean);
+}
+
+function jsonStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').map(item => item.trim()).filter(Boolean) : [];
+}
+
+export async function loadGmailDocumentAttachments(workspaceId: string, documentIds: string[]) {
+  const uniqueDocumentIds = Array.from(new Set(documentIds)).filter(Boolean);
+  if (uniqueDocumentIds.length === 0) return [];
+
+  const admin = getServiceSupabase();
+  const { data: docs, error } = await admin
+    .from('documents')
+    .select('id, file_name, file_path, workspace_id')
+    .eq('workspace_id', workspaceId)
+    .in('id', uniqueDocumentIds);
+
+  if (error) throw new Error('Documents introuvables pour les pièces jointes.');
+
+  const foundIds = new Set((docs ?? []).map(doc => doc.id));
+  const missing = uniqueDocumentIds.filter(id => !foundIds.has(id));
+  if (missing.length > 0) throw new Error('Certains documents ne sont plus accessibles.');
+
+  const attachments = await Promise.all((docs ?? []).map(async (doc) => {
+    const { data, error: downloadError } = await admin.storage.from('documents').download(doc.file_path);
+    if (downloadError || !data) throw new Error(`Téléchargement impossible : ${doc.file_name}`);
+    const content = Buffer.from(await data.arrayBuffer());
+    return {
+      filename: doc.file_name,
+      mimeType: data.type || 'application/pdf',
+      content,
+    } satisfies GmailAttachmentInput;
+  }));
+
+  const total = attachments.reduce((sum, attachment) => sum + attachment.content.byteLength, 0);
+  if (total > MAX_ATTACHMENT_BYTES) {
+    throw new Error('Documents trop lourds. Maximum 20 Mo par email.');
+  }
+
+  return attachments;
+}
+
+export function assertGmailAttachmentBudget(attachments: GmailAttachmentInput[]) {
+  const total = attachments.reduce((sum, attachment) => sum + attachment.content.byteLength, 0);
+  if (total > MAX_ATTACHMENT_BYTES) {
+    throw new Error('Pièces jointes trop lourdes. Maximum 20 Mo par email.');
+  }
+}
+
 export async function readGmailComposeRequest(request: NextRequest): Promise<GmailComposeRequestBody | null> {
   const contentType = request.headers.get('content-type') ?? '';
 
@@ -48,6 +103,9 @@ export async function readGmailComposeRequest(request: NextRequest): Promise<Gma
       subject: formValue(form, 'subject'),
       body: formValue(form, 'body'),
       thread_id: formValue(form, 'thread_id') || undefined,
+      reply_message_id: formValue(form, 'reply_message_id') || undefined,
+      references: formValue(form, 'references') || undefined,
+      document_ids: formValues(form, 'document_ids'),
       attachments: await readAttachments(form),
     };
   }
@@ -61,6 +119,9 @@ export async function readGmailComposeRequest(request: NextRequest): Promise<Gma
     subject: typeof body.subject === 'string' ? body.subject.trim() : '',
     body: typeof body.body === 'string' ? body.body.trim() : '',
     thread_id: typeof body.thread_id === 'string' ? body.thread_id.trim() : undefined,
+    reply_message_id: typeof body.reply_message_id === 'string' ? body.reply_message_id.trim() : undefined,
+    references: typeof body.references === 'string' ? body.references.trim() : undefined,
+    document_ids: jsonStringArray(body.document_ids),
     attachments: [],
   };
 }

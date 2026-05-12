@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ensureValidGmailAccessToken, sendGmailMessage } from '@/lib/gmail';
-import { readGmailComposeRequest } from '@/app/api/gmail/_compose';
+import { assertGmailAttachmentBudget, loadGmailDocumentAttachments, readGmailComposeRequest } from '@/app/api/gmail/_compose';
 import { getOwnedGmailConnection, gmailError, requireGmailRouteContext, requireWorkspaceMember } from '@/app/api/gmail/_utils';
 
 export async function POST(request: NextRequest) {
@@ -31,13 +31,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const accessToken = await ensureValidGmailAccessToken(context.supabase, connection);
+    const documentAttachments = await loadGmailDocumentAttachments(body.workspace_id, body.document_ids);
+    const attachments = [...body.attachments, ...documentAttachments];
+    assertGmailAttachmentBudget(attachments);
     const message = await sendGmailMessage({
       accessToken,
       to: body.to,
       subject: body.subject,
       body: body.body,
       threadId: body.thread_id,
-      attachments: body.attachments,
+      replyToMessageId: body.reply_message_id,
+      references: body.references,
+      attachments,
     });
 
     return NextResponse.json({ message_id: message.id, thread_id: message.threadId });

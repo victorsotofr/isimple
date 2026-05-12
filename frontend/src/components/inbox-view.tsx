@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Bot, CheckCircle2, ExternalLink, Mail, MessageCircle, MessageSquare, Paperclip, Plus, RefreshCw, Send, Sparkles, Upload, UserRound, X } from 'lucide-react';
+import { Bot, CheckCircle2, ExternalLink, FileText, Mail, MessageCircle, MessageSquare, Paperclip, Plus, RefreshCw, Send, Sparkles, Upload, UserRound, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +14,7 @@ import { useWorkspace } from '@/contexts/workspace-context';
 import { useLanguage } from '@/contexts/language-context';
 import { createClient } from '@/lib/supabase-browser';
 import { cn } from '@/lib/utils';
-import type { Conversation, Message, Tenant } from '@/db';
+import type { Conversation, Document, Message, Tenant } from '@/db';
 
 type ConversationWithTenant = Conversation & { tenants: Pick<Tenant, 'first_name' | 'last_name'> | null };
 
@@ -28,6 +28,8 @@ type GmailConnectionSummary = {
 type GmailThreadMessage = {
   id: string;
   message_id: string;
+  rfc_message_id: string | null;
+  references: string | null;
   from_email: string | null;
   from_name: string | null;
   to_emails: string[];
@@ -57,6 +59,8 @@ type GmailThreadSummary = {
   unread: boolean;
   messages: GmailThreadMessage[];
 };
+
+type GmailSuggestedDocument = Pick<Document, 'id' | 'file_name' | 'doc_type' | 'status' | 'lot_id' | 'tenant_id' | 'created_at' | 'updated_at'>;
 
 type SourceFilter = 'all' | 'isimple' | 'gmail' | 'whatsapp';
 
@@ -151,6 +155,10 @@ export function InboxView() {
   const [gmailSending, setGmailSending] = useState(false);
   const [gmailAiDrafting, setGmailAiDrafting] = useState(false);
   const [gmailAttachments, setGmailAttachments] = useState<File[]>([]);
+  const [gmailSuggestedDocs, setGmailSuggestedDocs] = useState<GmailSuggestedDocument[]>([]);
+  const [gmailSelectedDocumentIds, setGmailSelectedDocumentIds] = useState<string[]>([]);
+  const [gmailDocPickerOpen, setGmailDocPickerOpen] = useState(false);
+  const [gmailDocLoading, setGmailDocLoading] = useState(false);
   const [gmailDraftStatus, setGmailDraftStatus] = useState('');
 
   useEffect(() => {
@@ -209,6 +217,11 @@ export function InboxView() {
   useEffect(() => {
     gmailBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedGmailThread?.thread_id, selectedGmailThread?.messages.length]);
+
+  useEffect(() => {
+    loadGmailSuggestedDocuments();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGmailThread?.thread_id, activeWorkspace?.id, gmailConnections[0]?.email]);
 
   async function loadConversations() {
     if (!activeWorkspace) return;
@@ -305,6 +318,8 @@ export function InboxView() {
     setGmailDraftStatus('');
     setGmailDraft('');
     setGmailAttachments([]);
+    setGmailSelectedDocumentIds([]);
+    setGmailSuggestedDocs([]);
   }
 
   function handleSourceFilter(next: SourceFilter) {
@@ -345,6 +360,8 @@ export function InboxView() {
     return {
       email: latestIncoming?.from_email ?? fallbackEmail,
       name: latestIncoming?.from_name || thread.reply_to_name || thread.from_name || fallbackEmail,
+      messageId: latestIncoming?.rfc_message_id ?? null,
+      references: latestIncoming?.references ?? null,
     };
   }
 
@@ -361,6 +378,9 @@ export function InboxView() {
     form.append('subject', gmailReplySubject());
     form.append('body', gmailDraft.trim());
     form.append('thread_id', selectedGmailThread.thread_id);
+    if (target.messageId) form.append('reply_message_id', target.messageId);
+    if (target.references) form.append('references', target.references);
+    gmailSelectedDocumentIds.forEach(id => form.append('document_ids', id));
     gmailAttachments.forEach(file => form.append('attachments', file));
     return form;
   }
@@ -413,11 +433,103 @@ export function InboxView() {
   function handleAddGmailAttachments(files: FileList | null) {
     if (!files || files.length === 0) return;
     setGmailAttachments(prev => [...prev, ...Array.from(files)]);
+    setGmailDocPickerOpen(false);
     if (gmailAttachmentInputRef.current) gmailAttachmentInputRef.current.value = '';
   }
 
   function removeGmailAttachment(index: number) {
     setGmailAttachments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function toggleGmailSuggestedDocument(id: string) {
+    setGmailSelectedDocumentIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
+  }
+
+  function removeGmailSelectedDocument(id: string) {
+    setGmailSelectedDocumentIds(prev => prev.filter(item => item !== id));
+  }
+
+  async function loadGmailSuggestedDocuments() {
+    if (!activeWorkspace || !selectedGmailThread) {
+      setGmailSuggestedDocs([]);
+      return;
+    }
+
+    const target = gmailReplyTarget();
+    if (!target?.email) {
+      setGmailSuggestedDocs([]);
+      return;
+    }
+
+    setGmailDocLoading(true);
+    try {
+      const normalizedEmail = target.email.toLowerCase();
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('id, email')
+        .eq('workspace_id', activeWorkspace.id)
+        .ilike('email', normalizedEmail)
+        .maybeSingle();
+
+      if (!tenant?.id) {
+        setGmailSuggestedDocs([]);
+        return;
+      }
+
+      const [directDocs, tenantLinks, leases] = await Promise.all([
+        supabase
+          .from('documents')
+          .select('id, file_name, doc_type, status, lot_id, tenant_id, created_at, updated_at')
+          .eq('workspace_id', activeWorkspace.id)
+          .eq('status', 'confirmed')
+          .eq('tenant_id', tenant.id)
+          .order('updated_at', { ascending: false })
+          .limit(10),
+        supabase
+          .from('document_tenants')
+          .select('document_id')
+          .eq('workspace_id', activeWorkspace.id)
+          .eq('tenant_id', tenant.id),
+        supabase
+          .from('leases')
+          .select('lot_id')
+          .eq('workspace_id', activeWorkspace.id)
+          .eq('tenant_id', tenant.id)
+          .eq('status', 'active'),
+      ]);
+
+      const documentIds = Array.from(new Set((tenantLinks.data ?? []).map(link => link.document_id).filter(Boolean)));
+      const lotIds = Array.from(new Set((leases.data ?? []).map(lease => lease.lot_id).filter(Boolean)));
+      const [linkedDocs, lotDocs] = await Promise.all([
+        documentIds.length > 0
+          ? supabase
+            .from('documents')
+            .select('id, file_name, doc_type, status, lot_id, tenant_id, created_at, updated_at')
+            .eq('workspace_id', activeWorkspace.id)
+            .eq('status', 'confirmed')
+            .in('id', documentIds)
+            .order('updated_at', { ascending: false })
+            .limit(10)
+          : Promise.resolve({ data: [] as GmailSuggestedDocument[] }),
+        lotIds.length > 0
+          ? supabase
+            .from('documents')
+            .select('id, file_name, doc_type, status, lot_id, tenant_id, created_at, updated_at')
+            .eq('workspace_id', activeWorkspace.id)
+            .eq('status', 'confirmed')
+            .in('lot_id', lotIds)
+            .order('updated_at', { ascending: false })
+            .limit(10)
+          : Promise.resolve({ data: [] as GmailSuggestedDocument[] }),
+      ]);
+
+      const docs = new Map<string, GmailSuggestedDocument>();
+      [...(directDocs.data ?? []), ...(linkedDocs.data ?? []), ...(lotDocs.data ?? [])]
+        .forEach(doc => docs.set(doc.id, doc as GmailSuggestedDocument));
+      setGmailSuggestedDocs(Array.from(docs.values()).slice(0, 8));
+    } finally {
+      setGmailDocLoading(false);
+    }
   }
 
   async function handleSubmitGmailMessage(action: 'draft' | 'send') {
@@ -450,6 +562,7 @@ export function InboxView() {
       if (action === 'send') {
         setGmailDraft('');
         setGmailAttachments([]);
+        setGmailSelectedDocumentIds([]);
         const refreshed = await loadGmailThreads(gmailConnections[0].id);
         const refreshedThread = refreshed?.find(thread => thread.thread_id === selectedGmailThread.thread_id);
         if (refreshedThread) selectGmailThread(refreshedThread);
@@ -616,6 +729,8 @@ export function InboxView() {
     : selectedGmailThread ? [{
       id: selectedGmailThread.message_id ?? selectedGmailThread.thread_id,
       message_id: selectedGmailThread.message_id ?? selectedGmailThread.thread_id,
+      rfc_message_id: null,
+      references: null,
       from_email: selectedGmailThread.from_email,
       from_name: selectedGmailThread.from_name,
       to_emails: selectedGmailThread.to_emails,
@@ -635,6 +750,9 @@ export function InboxView() {
       return `${author}: ${message.body_text || message.snippet || ''}`;
     })
     .join('\n\n');
+  const selectedGmailDocs = gmailSelectedDocumentIds
+    .map(id => gmailSuggestedDocs.find(doc => doc.id === id))
+    .filter((doc): doc is GmailSuggestedDocument => Boolean(doc));
 
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] min-h-[560px] overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -880,7 +998,8 @@ export function InboxView() {
               </div>
             )}
 
-            <div className="flex-1 space-y-3 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto bg-background px-5 py-4">
+              <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
               {selectedGmailMessages.map((message, index) => {
                 const isOutgoing = message.direction === 'outgoing';
                 const sender = isOutgoing
@@ -891,7 +1010,7 @@ export function InboxView() {
                     key={message.message_id || message.id}
                     className={cn('flex animate-isimple-slide-in', isOutgoing ? 'justify-end' : 'justify-start')}
                   >
-                    <div className={cn('flex max-w-[78%] flex-col', isOutgoing ? 'items-end' : 'items-start')}>
+                    <div className={cn('flex flex-col', isOutgoing ? 'max-w-[82%] items-end' : 'w-full max-w-4xl items-start')}>
                       <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         {isOutgoing ? <UserRound className="size-3" /> : <Mail className="size-3 text-brand" />}
                         <span>{sender}</span>
@@ -905,7 +1024,7 @@ export function InboxView() {
                         )}
                       </div>
                       <div className={cn(
-                        'rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed shadow-sm',
+                        'w-full rounded-xl border px-5 py-4 text-sm leading-7 shadow-sm',
                         isOutgoing
                           ? 'rounded-br-sm border-brand/30 bg-brand text-brand-foreground'
                           : 'rounded-bl-sm border-border bg-card'
@@ -915,7 +1034,7 @@ export function InboxView() {
                             {message.subject || selectedGmailThread.subject || '(Sans objet)'}
                           </div>
                         )}
-                        <div className="whitespace-pre-wrap">
+                        <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                           {message.body_text || message.snippet || 'Aucun contenu lisible dans cet email.'}
                         </div>
                         <div className={cn('mt-3 grid gap-1 border-t pt-2 text-[11px]', isOutgoing ? 'border-white/20 text-brand-foreground/75' : 'text-muted-foreground')}>
@@ -928,6 +1047,7 @@ export function InboxView() {
                 );
               })}
               <div ref={gmailBottomRef} />
+              </div>
             </div>
 
             <div className="shrink-0 border-t bg-card p-3">
@@ -949,8 +1069,25 @@ export function InboxView() {
                   className="min-h-[92px] w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none"
                   placeholder="Rédiger la réponse à envoyer depuis Gmail..."
                 />
-                {gmailAttachments.length > 0 && (
+                {(gmailAttachments.length > 0 || selectedGmailDocs.length > 0) && (
                   <div className="flex flex-wrap gap-1.5">
+                    {selectedGmailDocs.map(doc => (
+                      <span
+                        key={doc.id}
+                        className="inline-flex max-w-[280px] items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] text-emerald-700"
+                      >
+                        <FileText className="size-3" />
+                        <span className="truncate">{doc.file_name}</span>
+                        <button
+                          type="button"
+                          className="rounded-full p-0.5 hover:bg-emerald-100"
+                          onClick={() => removeGmailSelectedDocument(doc.id)}
+                          aria-label="Retirer le document"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </span>
+                    ))}
                     {gmailAttachments.map((file, index) => (
                       <span
                         key={`${file.name}-${file.size}-${index}`}
@@ -976,7 +1113,7 @@ export function InboxView() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => gmailAttachmentInputRef.current?.click()}
+                      onClick={() => setGmailDocPickerOpen(true)}
                       className="h-8 gap-1.5"
                     >
                       <Paperclip className="size-3.5" />
@@ -1149,6 +1286,80 @@ export function InboxView() {
           </>
         )}
       </div>
+
+      <Dialog open={gmailDocPickerOpen} onOpenChange={setGmailDocPickerOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Ajouter des fichiers à l&apos;email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold">Documents suggérés</p>
+                  <p className="text-xs text-muted-foreground">Basés sur le locataire identifié et ses documents confirmés.</p>
+                </div>
+                <Button size="sm" variant="ghost" className="h-8 gap-1.5" onClick={loadGmailSuggestedDocuments} disabled={gmailDocLoading}>
+                  <RefreshCw className={cn('size-3.5', gmailDocLoading && 'animate-spin')} />
+                  Actualiser
+                </Button>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto rounded-lg border">
+                {gmailDocLoading ? (
+                  <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                    <RefreshCw className="size-4 animate-spin" />
+                    Recherche des documents liés...
+                  </div>
+                ) : gmailSuggestedDocs.length === 0 ? (
+                  <div className="px-3 py-4 text-sm text-muted-foreground">
+                    Aucun document confirmé lié à ce locataire. Vous pouvez parcourir votre ordinateur.
+                  </div>
+                ) : (
+                  gmailSuggestedDocs.map(doc => {
+                    const selectedDoc = gmailSelectedDocumentIds.includes(doc.id);
+                    return (
+                      <button
+                        key={doc.id}
+                        type="button"
+                        onClick={() => toggleGmailSuggestedDocument(doc.id)}
+                        className={cn(
+                          'flex w-full items-center gap-3 border-b px-3 py-2.5 text-left last:border-b-0 hover:bg-muted/50',
+                          selectedDoc && 'bg-emerald-50'
+                        )}
+                      >
+                        <span className={cn(
+                          'flex size-8 shrink-0 items-center justify-center rounded-lg border',
+                          selectedDoc ? 'border-emerald-200 bg-emerald-100 text-emerald-700' : 'bg-background text-muted-foreground'
+                        )}>
+                          {selectedDoc ? <CheckCircle2 className="size-4" /> : <FileText className="size-4" />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium">{doc.file_name}</span>
+                          <span className="text-xs text-muted-foreground">{doc.doc_type} · {doc.status === 'confirmed' ? 'confirmé' : 'à confirmer'}</span>
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => gmailAttachmentInputRef.current?.click()}
+            >
+              <Upload className="size-4" />
+              Parcourir l&apos;ordinateur
+            </Button>
+            <Button onClick={() => setGmailDocPickerOpen(false)}>
+              Ajouter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* New conversation dialog */}
       <Dialog open={newConvOpen} onOpenChange={setNewConvOpen}>
