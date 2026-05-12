@@ -5,7 +5,7 @@ from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 
 from ..services.ai import SYSTEM_PROMPT, generate_json
-from ..tools.supabase_tools import fetch_tenant_context
+from ..tools.supabase_tools import fetch_document_context, fetch_tenant_context
 
 TONE_LABELS = {
     "formal": "formel et professionnel",
@@ -22,6 +22,7 @@ class DraftState(TypedDict):
     recipient_name: str | None
     tone: str
     tenant_context: str
+    document_context: str
     draft: str
     final_subject: str
     ai_provider: str | None
@@ -32,8 +33,15 @@ class DraftState(TypedDict):
 
 
 async def node_fetch_context(state: DraftState) -> dict:
-    context = await fetch_tenant_context(state["workspace_id"], state.get("tenant_id"))
-    return {"tenant_context": context}
+    query = f"{state['subject']}\n{state['context']}".strip()
+    tenant_context = await fetch_tenant_context(state["workspace_id"], state.get("tenant_id"))
+    document_context = await fetch_document_context(
+        state["workspace_id"],
+        query,
+        tenant_id=state.get("tenant_id"),
+        match_count=5,
+    )
+    return {"tenant_context": tenant_context, "document_context": document_context}
 
 
 async def node_generate_draft(state: DraftState) -> dict:
@@ -43,6 +51,12 @@ async def node_generate_draft(state: DraftState) -> dict:
     context_parts: list[str] = []
     if state.get("tenant_context"):
         context_parts.append(f"Contexte locataire :\n{state['tenant_context']}")
+    if state.get("document_context"):
+        context_parts.append(
+            "Contexte documentaire récupéré :\n"
+            f"{state['document_context']}\n"
+            "Si tu utilises une information documentaire, indique le document source dans le brouillon."
+        )
     context_parts.append(state["context"])
 
     user_prompt = (
@@ -56,6 +70,11 @@ async def node_generate_draft(state: DraftState) -> dict:
     system_parts = [SYSTEM_PROMPT]
     if state.get("tenant_context"):
         system_parts.append(f"## Contexte du locataire\n{state['tenant_context']}")
+    if state.get("document_context"):
+        system_parts.append(
+            "## Contexte documentaire\n"
+            "N'invente pas de clause ou de date absente des sources récupérées."
+        )
 
     data, ai_result = await generate_json(
         "\n\n".join(system_parts),

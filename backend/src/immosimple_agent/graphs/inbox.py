@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TypedDict
 
-from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
 
 from ..services.ai import SYSTEM_PROMPT, generate_text
-from ..tools.supabase_tools import fetch_tenant_context
+from ..tools.supabase_tools import fetch_document_context, fetch_tenant_context
 
 
 class InboxState(TypedDict):
@@ -15,6 +16,7 @@ class InboxState(TypedDict):
     messages: list[BaseMessage]
     system_context: str | None
     tenant_context: str
+    document_context: str
     reply: str
     provider: str
     model: str
@@ -26,14 +28,37 @@ class InboxState(TypedDict):
 
 
 async def node_fetch_context(state: InboxState) -> dict:
-    context = await fetch_tenant_context(state["workspace_id"], state.get("tenant_id"))
-    return {"tenant_context": context}
+    recent_user_messages = [
+        str(message.content)
+        for message in state["messages"][-4:]
+        if isinstance(message, HumanMessage)
+    ]
+    query = "\n".join(recent_user_messages).strip()
+    tenant_context, document_context = await asyncio.gather(
+        fetch_tenant_context(state["workspace_id"], state.get("tenant_id")),
+        fetch_document_context(
+            state["workspace_id"],
+            query,
+            tenant_id=state.get("tenant_id"),
+            match_count=5,
+        )
+        if query
+        else asyncio.sleep(0, result=""),
+    )
+    return {"tenant_context": tenant_context, "document_context": document_context}
 
 
 async def node_generate_reply(state: InboxState) -> dict:
     system_parts = [SYSTEM_PROMPT]
     if state.get("tenant_context"):
         system_parts.append(f"## Contexte du locataire\n{state['tenant_context']}")
+    if state.get("document_context"):
+        system_parts.append(
+            "## Contexte documentaire récupéré\n"
+            "Utilise uniquement ces sources pour affirmer des faits issus de documents. "
+            "Mentionne le nom du document quand c'est utile et signale clairement toute incertitude.\n"
+            f"{state['document_context']}"
+        )
     if state.get("system_context"):
         system_parts.append(state["system_context"])
 

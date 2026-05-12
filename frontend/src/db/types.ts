@@ -3,6 +3,17 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 export type DocumentType = 'bail' | 'caution' | 'quittance' | 'etat_des_lieux' | 'assurance' | 'rib' | 'caf' | 'piece_identite' | 'mandat' | 'facture' | 'autre';
+export type DocumentVisibility = 'internal' | 'tenant' | 'landlord' | 'provider' | 'shared';
+export type DocumentProcessingStatus = 'uploaded' | 'parsed' | 'extracted' | 'matched' | 'reviewed' | 'indexed' | 'failed';
+export type DocumentDeliveryChannel = 'email' | 'sms' | 'whatsapp' | 'portal' | 'download' | 'manual';
+export type DocumentRecipientType = 'tenant' | 'landlord' | 'provider' | 'agency' | 'other';
+export type DocumentDeliveryStatus = 'prepared' | 'sent' | 'failed';
+export type DocumentProcessingJobStage = 'uploaded' | 'parsed' | 'extracted' | 'matched' | 'reviewed' | 'indexed' | 'delivery';
+export type DocumentProcessingJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+export type VectorStoreProvider = 'openai' | 'pinecone' | 'supabase';
+export type VectorStoreScope = 'workspace' | 'tenant' | 'lot';
+export type VectorStoreStatus = 'pending' | 'ready' | 'syncing' | 'failed' | 'deleted';
+export type DocumentExternalFileStatus = 'queued' | 'uploading' | 'indexed' | 'failed' | 'deleted';
 
 export interface Database {
   public: {
@@ -242,6 +253,12 @@ export interface Database {
           extracted_data: Json | null;
           lot_id: string | null;
           tenant_id: string | null;
+          visibility: DocumentVisibility;
+          processing_status: DocumentProcessingStatus;
+          parsed_text: string | null;
+          parser_provider: string | null;
+          indexed_at: string | null;
+          content_hash: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -255,6 +272,12 @@ export interface Database {
           extracted_data?: Json | null;
           lot_id?: string | null;
           tenant_id?: string | null;
+          visibility?: DocumentVisibility;
+          processing_status?: DocumentProcessingStatus;
+          parsed_text?: string | null;
+          parser_provider?: string | null;
+          indexed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -268,8 +291,111 @@ export interface Database {
           extracted_data?: Json | null;
           lot_id?: string | null;
           tenant_id?: string | null;
+          visibility?: DocumentVisibility;
+          processing_status?: DocumentProcessingStatus;
+          parsed_text?: string | null;
+          parser_provider?: string | null;
+          indexed_at?: string | null;
+          content_hash?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      document_processing_jobs: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          document_id: string | null;
+          stage: DocumentProcessingJobStage;
+          status: DocumentProcessingJobStatus;
+          provider: string | null;
+          model: string | null;
+          input: Json;
+          output: Json;
+          error: string | null;
+          attempts: number;
+          started_at: string | null;
+          finished_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          document_id?: string | null;
+          stage: DocumentProcessingJobStage;
+          status?: DocumentProcessingJobStatus;
+          provider?: string | null;
+          model?: string | null;
+          input?: Json;
+          output?: Json;
+          error?: string | null;
+          attempts?: number;
+          started_at?: string | null;
+          finished_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          document_id?: string | null;
+          stage?: DocumentProcessingJobStage;
+          status?: DocumentProcessingJobStatus;
+          provider?: string | null;
+          model?: string | null;
+          input?: Json;
+          output?: Json;
+          error?: string | null;
+          attempts?: number;
+          started_at?: string | null;
+          finished_at?: string | null;
+          created_at?: string;
+        };
+      };
+      document_deliveries: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          document_id: string;
+          channel: DocumentDeliveryChannel;
+          recipient_type: DocumentRecipientType;
+          recipient_id: string | null;
+          recipient_address: string | null;
+          status: DocumentDeliveryStatus;
+          message: string | null;
+          signed_url: string | null;
+          signed_url_expires_at: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          document_id: string;
+          channel: DocumentDeliveryChannel;
+          recipient_type: DocumentRecipientType;
+          recipient_id?: string | null;
+          recipient_address?: string | null;
+          status?: DocumentDeliveryStatus;
+          message?: string | null;
+          signed_url?: string | null;
+          signed_url_expires_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          document_id?: string;
+          channel?: DocumentDeliveryChannel;
+          recipient_type?: DocumentRecipientType;
+          recipient_id?: string | null;
+          recipient_address?: string | null;
+          status?: DocumentDeliveryStatus;
+          message?: string | null;
+          signed_url?: string | null;
+          signed_url_expires_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
         };
       };
       document_tenants: {
@@ -290,6 +416,97 @@ export interface Database {
           tenant_id?: string;
           workspace_id?: string;
           created_at?: string;
+        };
+      };
+      workspace_vector_stores: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          provider: VectorStoreProvider;
+          scope: VectorStoreScope;
+          scope_id: string | null;
+          name: string;
+          external_id: string | null;
+          status: VectorStoreStatus;
+          usage_bytes: number | null;
+          metadata: Json;
+          last_synced_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          provider: VectorStoreProvider;
+          scope?: VectorStoreScope;
+          scope_id?: string | null;
+          name: string;
+          external_id?: string | null;
+          status?: VectorStoreStatus;
+          usage_bytes?: number | null;
+          metadata?: Json;
+          last_synced_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          provider?: VectorStoreProvider;
+          scope?: VectorStoreScope;
+          scope_id?: string | null;
+          name?: string;
+          external_id?: string | null;
+          status?: VectorStoreStatus;
+          usage_bytes?: number | null;
+          metadata?: Json;
+          last_synced_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      document_external_files: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          workspace_vector_store_id: string;
+          document_id: string;
+          provider: VectorStoreProvider;
+          external_file_id: string | null;
+          external_vector_file_id: string | null;
+          status: DocumentExternalFileStatus;
+          attributes: Json;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          workspace_vector_store_id: string;
+          document_id: string;
+          provider: VectorStoreProvider;
+          external_file_id?: string | null;
+          external_vector_file_id?: string | null;
+          status?: DocumentExternalFileStatus;
+          attributes?: Json;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          workspace_vector_store_id?: string;
+          document_id?: string;
+          provider?: VectorStoreProvider;
+          external_file_id?: string | null;
+          external_vector_file_id?: string | null;
+          status?: DocumentExternalFileStatus;
+          attributes?: Json;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
       };
       messages: {
@@ -329,7 +546,11 @@ export interface Database {
 }
 
 export type Document = Database['public']['Tables']['documents']['Row'];
+export type DocumentProcessingJob = Database['public']['Tables']['document_processing_jobs']['Row'];
+export type DocumentDelivery = Database['public']['Tables']['document_deliveries']['Row'];
 export type DocumentTenant = Database['public']['Tables']['document_tenants']['Row'];
+export type WorkspaceVectorStore = Database['public']['Tables']['workspace_vector_stores']['Row'];
+export type DocumentExternalFile = Database['public']['Tables']['document_external_files']['Row'];
 export type Workspace = Database['public']['Tables']['workspaces']['Row'];
 export type WorkspaceMember = Database['public']['Tables']['workspace_members']['Row'];
 export type WorkspaceInvitation = Database['public']['Tables']['workspace_invitations']['Row'];

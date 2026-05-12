@@ -160,20 +160,25 @@ export function InboxView() {
 
     // Auto-classify if tenant message
     if (sendRole === 'tenant') {
-      classifyAndUpdate(selected.id, compose.trim());
+      classifyAndUpdate(selected.id, compose.trim(), selected.tenant_id ?? null);
     }
 
     setCompose('');
     setSending(false);
   }
 
-  async function classifyAndUpdate(convId: string, message: string) {
+  async function classifyAndUpdate(convId: string, message: string, tenantId?: string | null) {
     if (!activeWorkspace) return;
     try {
       const res = await fetch('/api/agent/classify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspace_id: activeWorkspace.id, message }),
+        body: JSON.stringify({
+          workspace_id: activeWorkspace.id,
+          conversation_id: convId,
+          tenant_id: tenantId ?? null,
+          message,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -212,6 +217,7 @@ export function InboxView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: activeWorkspace.id,
+          conversation_id: selected.id,
           tenant_id: selected.tenant_id ?? null,
           subject: selected.subject,
           context: context || selected.subject,
@@ -256,7 +262,7 @@ export function InboxView() {
         role: 'tenant',
       });
       // Auto-classify first message
-      classifyAndUpdate(conv.id, newConv.first_message.trim());
+      classifyAndUpdate(conv.id, newConv.first_message.trim(), newConv.tenant_id);
     }
 
     if (conv) {

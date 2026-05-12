@@ -129,6 +129,185 @@
         }
       }
     },
+    "/api/documents/index": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Index Document Route",
+        "operationId": "index_document",
+        "parameters": [
+          {
+            "name": "X-Agent-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentIndexRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentIndexResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/unindex": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Unindex Document Route",
+        "operationId": "unindex_document",
+        "parameters": [
+          {
+            "name": "X-Agent-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentUnindexRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Unindex Document"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/documents/search": {
+      "post": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Search Documents Route",
+        "operationId": "search_documents",
+        "parameters": [
+          {
+            "name": "X-Agent-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentSearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -172,6 +351,42 @@
             "title": "Tenant Id",
             "description": "ID du locataire pour enrichir le contexte"
           },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "ID de conversation pour résoudre l'identité"
+          },
+          "sender_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Email",
+            "description": "Email expéditeur pour résoudre l'identité"
+          },
+          "sender_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Phone",
+            "description": "Téléphone expéditeur pour résoudre l'identité"
+          },
           "messages": {
             "items": {
               "$ref": "#/components/schemas/Message"
@@ -192,6 +407,34 @@
             ],
             "title": "System Context",
             "description": "Contexte additionnel à injecter dans le prompt système"
+          },
+          "ai_provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "anthropic",
+                  "openai"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Provider",
+            "description": "Provider IA à utiliser"
+          },
+          "ai_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Model",
+            "description": "Modèle IA à utiliser"
           }
         },
         "type": "object",
@@ -208,6 +451,18 @@
             "title": "Reply",
             "description": "Réponse générée par l'IA"
           },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Provider IA utilisé"
+          },
           "model": {
             "type": "string",
             "title": "Model",
@@ -220,6 +475,54 @@
           "output_tokens": {
             "type": "integer",
             "title": "Output Tokens"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms",
+            "description": "Latence de génération"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id",
+            "description": "Locataire identifié pour le contexte"
+          },
+          "identity_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Confidence",
+            "description": "Confiance de résolution d'identité"
+          },
+          "identity_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Reason",
+            "description": "Méthode de résolution d'identité"
           }
         },
         "type": "object",
@@ -242,6 +545,82 @@
             "type": "string",
             "title": "Message",
             "description": "Message entrant à classifier"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id",
+            "description": "ID du locataire si déjà connu"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "ID de conversation pour résoudre l'identité"
+          },
+          "sender_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Email",
+            "description": "Email expéditeur pour résoudre l'identité"
+          },
+          "sender_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Phone",
+            "description": "Téléphone expéditeur pour résoudre l'identité"
+          },
+          "ai_provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "anthropic",
+                  "openai"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Provider",
+            "description": "Provider IA à utiliser"
+          },
+          "ai_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Model",
+            "description": "Modèle IA à utiliser"
           }
         },
         "type": "object",
@@ -269,6 +648,78 @@
             "type": "string",
             "title": "Summary",
             "description": "Résumé court du message"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Provider IA utilisé"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Modèle IA utilisé"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms",
+            "description": "Latence de classification"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id",
+            "description": "Locataire identifié"
+          },
+          "identity_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Confidence",
+            "description": "Confiance de résolution d'identité"
+          },
+          "identity_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Reason",
+            "description": "Méthode de résolution d'identité"
           }
         },
         "type": "object",
@@ -278,6 +729,288 @@
           "summary"
         ],
         "title": "ClassifyResponse"
+      },
+      "DocumentIndexRequest": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id",
+            "description": "ID de l'espace de travail"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id",
+            "description": "ID du document à indexer"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Indexer même si le document n'est pas confirmé",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "document_id"
+        ],
+        "title": "DocumentIndexRequest"
+      },
+      "DocumentIndexResponse": {
+        "properties": {
+          "indexed": {
+            "type": "boolean",
+            "title": "Indexed"
+          },
+          "retrieval_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Provider"
+          },
+          "vector_store_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Store Id"
+          },
+          "external_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External File Id"
+          },
+          "text_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Chars"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "indexed"
+        ],
+        "title": "DocumentIndexResponse"
+      },
+      "DocumentSearchRequest": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id",
+            "description": "ID de l'espace de travail"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Query",
+            "description": "Question ou recherche documentaire"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id",
+            "description": "Restreindre aux documents liés au locataire"
+          },
+          "lot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot Id",
+            "description": "Restreindre aux documents liés au lot"
+          },
+          "include_pending": {
+            "type": "boolean",
+            "title": "Include Pending",
+            "description": "Inclure les documents non confirmés",
+            "default": false
+          },
+          "match_count": {
+            "type": "integer",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Match Count",
+            "description": "Nombre de passages à retourner",
+            "default": 8
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "query"
+        ],
+        "title": "DocumentSearchRequest"
+      },
+      "DocumentSearchResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentSearchResultResponse"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "title": "DocumentSearchResponse"
+      },
+      "DocumentSearchResultResponse": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "doc_type": {
+            "type": "string",
+            "title": "Doc Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "page_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Number"
+          },
+          "lot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot Id"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "document_id",
+          "file_name",
+          "doc_type",
+          "status",
+          "content",
+          "score",
+          "source"
+        ],
+        "title": "DocumentSearchResultResponse"
+      },
+      "DocumentUnindexRequest": {
+        "properties": {
+          "workspace_id": {
+            "type": "string",
+            "title": "Workspace Id",
+            "description": "ID de l'espace de travail"
+          },
+          "document_id": {
+            "type": "string",
+            "title": "Document Id",
+            "description": "ID du document à retirer de l'index"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workspace_id",
+          "document_id"
+        ],
+        "title": "DocumentUnindexRequest"
       },
       "DraftRequest": {
         "properties": {
@@ -297,6 +1030,42 @@
             ],
             "title": "Tenant Id",
             "description": "ID du locataire pour enrichir le contexte"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id",
+            "description": "ID de conversation pour résoudre l'identité"
+          },
+          "sender_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Email",
+            "description": "Email destinataire/expéditeur pour résoudre l'identité"
+          },
+          "sender_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Phone",
+            "description": "Téléphone destinataire/expéditeur pour résoudre l'identité"
           },
           "subject": {
             "type": "string",
@@ -330,6 +1099,34 @@
             "title": "Tone",
             "description": "Ton du message",
             "default": "formal"
+          },
+          "ai_provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "anthropic",
+                  "openai"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Provider",
+            "description": "Provider IA à utiliser"
+          },
+          "ai_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Model",
+            "description": "Modèle IA à utiliser"
           }
         },
         "type": "object",
@@ -351,6 +1148,78 @@
             "type": "string",
             "title": "Subject",
             "description": "Objet du message"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "Provider IA utilisé"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Modèle IA utilisé"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms",
+            "description": "Latence de génération"
+          },
+          "tenant_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Id",
+            "description": "Locataire identifié pour le contexte"
+          },
+          "identity_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Confidence",
+            "description": "Confiance de résolution d'identité"
+          },
+          "identity_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identity Reason",
+            "description": "Méthode de résolution d'identité"
           }
         },
         "type": "object",

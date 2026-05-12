@@ -3,6 +3,8 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { getServiceSupabase } from '@/lib/supabase';
 
+const AGENT_URL = process.env.AGENT_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? 'http://localhost:8000';
+
 async function getUser() {
   const cookieStore = await cookies();
   const supabase = createServerClient(
@@ -19,6 +21,61 @@ async function getUser() {
   return supabase.auth.getUser();
 }
 
+async function getAccessibleDocument(
+  admin: ReturnType<typeof getServiceSupabase>,
+  id: string,
+  userId: string
+) {
+  const { data: doc, error } = await admin
+    .from('documents')
+    .select('id, workspace_id, file_path')
+    .eq('id', id)
+    .single();
+  if (error || !doc) return { error: NextResponse.json({ error: 'Document introuvable' }, { status: 404 }) };
+
+  const { data: member } = await admin
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('workspace_id', doc.workspace_id)
+    .eq('user_id', userId)
+    .single();
+  if (!member) return { error: NextResponse.json({ error: 'Accès refusé' }, { status: 403 }) };
+
+  return { doc };
+}
+
+async function triggerDocumentIndex(workspaceId: string, documentId: string) {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (process.env.AGENT_INTERNAL_TOKEN) {
+      headers['X-Agent-Token'] = process.env.AGENT_INTERNAL_TOKEN;
+    }
+    await fetch(`${AGENT_URL}/api/documents/index`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ workspace_id: workspaceId, document_id: documentId }),
+    });
+  } catch (error) {
+    console.warn('[documents/index] agent unavailable:', error);
+  }
+}
+
+async function triggerDocumentUnindex(workspaceId: string, documentId: string) {
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (process.env.AGENT_INTERNAL_TOKEN) {
+      headers['X-Agent-Token'] = process.env.AGENT_INTERNAL_TOKEN;
+    }
+    await fetch(`${AGENT_URL}/api/documents/unindex`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ workspace_id: workspaceId, document_id: documentId }),
+    });
+  } catch (error) {
+    console.warn('[documents/unindex] agent unavailable:', error);
+  }
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -29,9 +86,15 @@ export async function PATCH(
 
   const body = await req.json();
   const admin = getServiceSupabase();
+  const access = await getAccessibleDocument(admin, id, user.id);
+  if ('error' in access) return access.error;
 
   // Split tenant_ids out of the update payload — it targets the junction table.
   const { tenant_ids, ...docUpdates } = body as { tenant_ids?: string[] } & Record<string, unknown>;
+  const shouldIndex = docUpdates.status === 'confirmed';
+  if (shouldIndex && !docUpdates.processing_status) {
+    docUpdates.processing_status = 'reviewed';
+  }
 
   // Keep documents.tenant_id aligned with the first entry of tenant_ids (legacy "primary").
   if (Array.isArray(tenant_ids)) {
@@ -42,6 +105,7 @@ export async function PATCH(
     .from('documents')
     .update({ ...docUpdates, updated_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('workspace_id', access.doc.workspace_id)
     .select()
     .single();
 
@@ -61,6 +125,10 @@ export async function PATCH(
     }
   }
 
+  if (shouldIndex) {
+    await triggerDocumentIndex(data.workspace_id, id);
+  }
+
   return NextResponse.json(data);
 }
 
@@ -73,15 +141,20 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = getServiceSupabase();
+  const access = await getAccessibleDocument(admin, id, user.id);
+  if ('error' in access) return access.error;
 
-  // Get file_path before deleting to remove from storage
-  const { data: doc } = await admin.from('documents').select('file_path').eq('id', id).single();
+  await triggerDocumentUnindex(access.doc.workspace_id, id);
 
-  const { error } = await admin.from('documents').delete().eq('id', id);
+  const { error } = await admin
+    .from('documents')
+    .delete()
+    .eq('id', id)
+    .eq('workspace_id', access.doc.workspace_id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (doc?.file_path) {
-    await admin.storage.from('documents').remove([doc.file_path]);
+  if (access.doc.file_path) {
+    await admin.storage.from('documents').remove([access.doc.file_path]);
   }
 
   return NextResponse.json({ success: true });

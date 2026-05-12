@@ -3,6 +3,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { getServiceSupabase } from '@/lib/supabase';
 import Anthropic from '@anthropic-ai/sdk';
+import { createHash } from 'node:crypto';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -34,7 +35,11 @@ Retourne UNIQUEMENT du JSON valide (null ou [] si inconnu) :
   "document_date": "YYYY-MM-DD" | null,
   "rent_amount": number | null,
   "charges_amount": number | null,
-  "summary": "résumé en 1-2 phrases en français"
+  "summary": "résumé en 1-2 phrases en français",
+  "key_facts": [{ "label": string, "value": string, "page": number | null }],
+  "key_clauses": [{ "title": string, "text": string, "page": number | null }],
+  "action_items": [{ "type": string, "label": string, "due_date": "YYYY-MM-DD" | null, "text": string | null }],
+  "retrieval_text": "texte synthétique en français, structuré pour retrouver ce document et répondre aux questions courantes. Inclure les montants, dates, parties, clauses utiles et obligations. 1000 mots maximum."
 }`;
 
 type PropertyType = 'apartment' | 'house' | 'studio' | 'parking' | 'commercial' | 'other';
@@ -137,11 +142,21 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = getServiceSupabase();
+    const { data: member } = await admin
+      .from('workspace_members')
+      .select('workspace_id')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
+      .single();
+    if (!member) {
+      return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+    }
 
     // Upload to Supabase Storage
     const month = new Date().toISOString().slice(0, 7);
     const filePath = `${workspaceId}/${month}/${source}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeFileName(file.name)}`;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const contentHash = createHash('sha256').update(fileBuffer).digest('hex');
 
     const { error: uploadError } = await admin.storage
       .from('documents')
@@ -170,7 +185,7 @@ export async function POST(req: NextRequest) {
 
       const response = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        max_tokens: 2048,
         messages: [{ role: 'user', content }],
       });
 
@@ -367,7 +382,7 @@ export async function POST(req: NextRequest) {
         source,
         provider: 'anthropic',
         parser: 'native-llm',
-        status: 'needs_review',
+        status: 'matched',
         uploaded_at: new Date().toISOString(),
         conversation_id: conversationId,
         context_lot_id: contextLotId,
@@ -388,6 +403,11 @@ export async function POST(req: NextRequest) {
         file_path: filePath,
         doc_type: (extractedData.doc_type as string) || 'autre',
         status: 'pending',
+        processing_status: 'matched',
+        visibility: 'internal',
+        parser_provider: 'anthropic-native',
+        parsed_text: typeof extractedData.retrieval_text === 'string' ? extractedData.retrieval_text : null,
+        content_hash: contentHash,
         extracted_data: extractedData,
         lot_id: suggestedLotId,
         tenant_id: suggestedTenantId,
@@ -399,6 +419,24 @@ export async function POST(req: NextRequest) {
       console.error('[documents/upload] db error:', dbError);
       return NextResponse.json({ error: 'Erreur base de données' }, { status: 500 });
     }
+
+    await admin.from('document_processing_jobs').insert({
+      workspace_id: workspaceId,
+      document_id: doc.id,
+      stage: 'extracted',
+      status: 'succeeded',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      output: {
+        doc_type: extractedData.doc_type ?? 'autre',
+        review_flags: reviewFlags,
+        suggested_lot_id: suggestedLotId,
+        suggested_tenant_ids: linkedTenantIds,
+      },
+      attempts: 1,
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+    });
 
     // Persist every matched tenant in the junction table.
     if (linkedTenantIds.length > 0) {

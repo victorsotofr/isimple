@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from .models.responses import HealthResponse
-from .routes import chat, classify, draft
+from .routes import chat, classify, documents, draft
 
 load_dotenv()
 
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, prefix="/api")
     app.include_router(draft.router, prefix="/api")
     app.include_router(classify.router, prefix="/api")
+    app.include_router(documents.router, prefix="/api")
 
     @app.get("/health", response_model=HealthResponse, tags=["health"], operation_id="health")
     async def health() -> HealthResponse:

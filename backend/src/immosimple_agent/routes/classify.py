@@ -5,6 +5,8 @@ from fastapi import APIRouter, HTTPException
 from ..models.requests import ClassifyRequest
 from ..models.responses import ClassifyResponse
 from ..services.ai import AIConfigError, SYSTEM_PROMPT, generate_json
+from ..services.identity import IdentityResolution, resolve_tenant_identity
+from ..tools.supabase_tools import get_supabase_client
 
 router = APIRouter(tags=["classify"])
 
@@ -19,6 +21,19 @@ CATEGORIES = {"maintenance", "paiement", "réclamation", "document", "informatio
 @router.post("/classify", response_model=ClassifyResponse, operation_id="classify")
 async def classify(request: ClassifyRequest) -> ClassifyResponse:
     try:
+        sb = get_supabase_client()
+        identity = (
+            resolve_tenant_identity(
+                sb,
+                workspace_id=request.workspace_id,
+                tenant_id=request.tenant_id,
+                conversation_id=request.conversation_id,
+                sender_email=request.sender_email,
+                sender_phone=request.sender_phone,
+            )
+            if sb
+            else IdentityResolution(tenant_id=request.tenant_id, confidence=0.0, reason="supabase_unavailable")
+        )
         data, ai_result = await generate_json(
             f"{SYSTEM_PROMPT}\n\n{CLASSIFY_INSTRUCTIONS}",
             (
@@ -42,6 +57,9 @@ async def classify(request: ClassifyRequest) -> ClassifyResponse:
             provider=ai_result.provider,
             model=ai_result.model,
             latency_ms=ai_result.latency_ms,
+            tenant_id=identity.tenant_id,
+            identity_confidence=identity.confidence,
+            identity_reason=identity.reason,
         )
     except AIConfigError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

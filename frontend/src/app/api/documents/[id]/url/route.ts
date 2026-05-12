@@ -24,8 +24,20 @@ export async function GET(
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = getServiceSupabase();
-  const { data: doc } = await admin.from('documents').select('file_path').eq('id', id).single();
+  const { data: doc } = await admin
+    .from('documents')
+    .select('file_path, workspace_id')
+    .eq('id', id)
+    .single();
   if (!doc) return NextResponse.json({ error: 'Document introuvable' }, { status: 404 });
+
+  const { data: member } = await admin
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('workspace_id', doc.workspace_id)
+    .eq('user_id', user.id)
+    .single();
+  if (!member) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
   const { data } = await admin.storage.from('documents').createSignedUrl(doc.file_path, 3600);
   return NextResponse.json({ url: data?.signedUrl ?? '' });

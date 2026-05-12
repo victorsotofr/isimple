@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   FileText, Upload, Eye, Pencil, Trash2, AlertCircle,
   CheckCircle2, Loader2, Home, User, Plus, Search, SlidersHorizontal,
+  Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -132,6 +133,31 @@ export default function DocumentsPage() {
     });
     if (res.ok) {
       setDocs(prev => prev.map(d => d.id === doc.id ? { ...d, status: 'confirmed' } : d));
+    }
+    setBusyId(null);
+  };
+
+  const handlePrepareDelivery = async (doc: DocWithRefs) => {
+    setBusyId(doc.id);
+    const primaryTenant = doc.tenants[0] ?? null;
+    const res = await fetch(`/api/documents/${doc.id}/deliver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel: 'download',
+        recipient_type: primaryTenant ? 'tenant' : 'agency',
+        recipient_id: primaryTenant?.id ?? null,
+        recipient_address: primaryTenant?.email ?? null,
+        status: 'prepared',
+        message: `Document préparé depuis le coffre-fort: ${doc.file_name}`,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.signed_url === 'string') {
+        await navigator.clipboard?.writeText(data.signed_url).catch(() => undefined);
+        window.open(data.signed_url, '_blank', 'noopener,noreferrer');
+      }
     }
     setBusyId(null);
   };
@@ -285,6 +311,16 @@ export default function DocumentsPage() {
                       <Button
                         size="icon"
                         variant="ghost"
+                        className="size-8"
+                        onClick={() => handlePrepareDelivery(doc)}
+                        aria-label="Préparer l’envoi"
+                        disabled={busyId === doc.id}
+                      >
+                        {busyId === doc.id ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
                         className="size-8 text-destructive hover:text-destructive"
                         onClick={() => handleDelete(doc)}
                         aria-label="Supprimer"
@@ -317,9 +353,17 @@ export default function DocumentsPage() {
                   </p>
                 </div>
                 {previewDoc && (
-                  <Button size="sm" variant="outline" onClick={() => router.push(`/documents/upload?review=${previewDoc.id}`)}>
-                    Réviser
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {previewDoc.status === 'confirmed' && (
+                      <Button size="sm" variant="outline" onClick={() => handlePrepareDelivery(previewDoc)} disabled={busyId === previewDoc.id}>
+                        {busyId === previewDoc.id ? <Loader2 className="size-3.5 mr-1.5 animate-spin" /> : <Send className="size-3.5 mr-1.5" />}
+                        Envoyer
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => router.push(`/documents/upload?review=${previewDoc.id}`)}>
+                      Réviser
+                    </Button>
+                  </div>
                 )}
               </div>
               <div className="h-[640px] bg-muted/30">
