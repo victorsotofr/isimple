@@ -49,14 +49,11 @@ function normalizeOutgoingEmailBody(value: string) {
     .split('\n')
     .filter(line => !/^\s*\(?sources?\s*:/i.test(line.trim()))
     .join('\n')
-    .split(/\n{2,}/)
-    .map(paragraph => {
-      const lines = paragraph.split('\n').map(line => line.trim()).filter(Boolean);
-      const shouldPreserveLineBreaks = lines.some(line => /^([-*•]|\d+[.)])\s+/.test(line));
-      return shouldPreserveLineBreaks ? lines.join('\n') : lines.join(' ').replace(/\s{2,}/g, ' ');
-    })
-    .filter(Boolean)
-    .join('\n\n')
+    .split('\n')
+    .map(line => line.trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/([^\n])\n(Cordialement,?|Bien à vous,?|Bonne journée,?)/i, '$1\n\n$2')
     .trim();
 }
 

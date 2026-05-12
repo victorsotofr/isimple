@@ -101,16 +101,13 @@ function stripEmailSourceLines(value: string) {
     .trim();
 }
 
-function normalizeEmailParagraphs(value: string) {
+function cleanEmailBody(value: string) {
   return stripEmailSourceLines(value)
-    .split(/\n{2,}/)
-    .map(paragraph => {
-      const lines = paragraph.split('\n').map(line => line.trim()).filter(Boolean);
-      const shouldPreserveLineBreaks = lines.some(line => /^([-*•]|\d+[.)])\s+/.test(line));
-      return shouldPreserveLineBreaks ? lines.join('\n') : lines.join(' ').replace(/\s{2,}/g, ' ');
-    })
-    .filter(Boolean)
-    .join('\n\n')
+    .split('\n')
+    .map(line => line.trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/([^\n])\n(Cordialement,?|Bien à vous,?|Bonne journée,?)/i, '$1\n\n$2')
     .trim();
 }
 
@@ -318,7 +315,7 @@ export function InboxView() {
   }
 
   function withGmailSignature(value: string) {
-    const draft = normalizeEmailParagraphs(value.replace(/\[Votre Nom\]/gi, activeWorkspace?.name ?? 'Votre agence'));
+    const draft = cleanEmailBody(value.replace(/\[Votre Nom\]/gi, activeWorkspace?.name ?? 'Votre agence'));
     if (/cordialement|bien à vous|bonne journée/i.test(draft)) return draft;
     return `${draft}\n\n${gmailSignature()}`.trim();
   }
@@ -397,7 +394,7 @@ export function InboxView() {
     form.append('connection_id', gmailConnections[0].id);
     form.append('to', target.email);
     form.append('subject', gmailReplySubject());
-    form.append('body', normalizeEmailParagraphs(gmailDraft));
+    form.append('body', cleanEmailBody(gmailDraft));
     form.append('thread_id', selectedGmailThread.thread_id);
     if (target.messageId) form.append('reply_message_id', target.messageId);
     if (target.references) form.append('references', target.references);
@@ -1029,9 +1026,9 @@ export function InboxView() {
                 return (
                   <div
                     key={message.message_id || message.id}
-                    className={cn('flex animate-isimple-slide-in', isOutgoing ? 'justify-end' : 'justify-start')}
+                    className="flex animate-isimple-slide-in justify-start"
                   >
-                    <div className={cn('flex flex-col', isOutgoing ? 'max-w-[82%] items-end' : 'w-full max-w-4xl items-start')}>
+                    <div className="flex w-full max-w-4xl flex-col items-start">
                       <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         {isOutgoing ? <UserRound className="size-3" /> : <Mail className="size-3 text-brand" />}
                         <span>{sender}</span>
@@ -1047,18 +1044,18 @@ export function InboxView() {
                       <div className={cn(
                         'w-full rounded-xl border px-5 py-4 text-sm leading-7 shadow-sm',
                         isOutgoing
-                          ? 'rounded-br-sm border-brand/30 bg-brand text-brand-foreground'
+                          ? 'border-brand/20 bg-brand-muted text-foreground'
                           : 'rounded-bl-sm border-border bg-card'
                       )}>
                         {index === 0 && (
-                          <div className={cn('mb-2 border-b pb-2 text-xs font-semibold', isOutgoing ? 'border-white/20 text-brand-foreground' : 'text-foreground')}>
+                          <div className="mb-2 border-b pb-2 text-xs font-semibold text-foreground">
                             {message.subject || selectedGmailThread.subject || '(Sans objet)'}
                           </div>
                         )}
                         <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                           {message.body_text || message.snippet || 'Aucun contenu lisible dans cet email.'}
                         </div>
-                        <div className={cn('mt-3 grid gap-1 border-t pt-2 text-[11px]', isOutgoing ? 'border-white/20 text-brand-foreground/75' : 'text-muted-foreground')}>
+                        <div className="mt-3 grid gap-1 border-t pt-2 text-[11px] text-muted-foreground">
                           <span>De : {message.from_name || message.from_email || 'inconnu'} {message.from_email ? `<${message.from_email}>` : ''}</span>
                           <span>Vers : {message.to_emails.join(', ') || gmailConnections[0]?.email || 'Gmail'}</span>
                         </div>
