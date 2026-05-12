@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Bot, CircleDot, Mail, MessageCircle, MessageSquare, Paperclip, Plus, Send, Sparkles, Upload, UserRound } from 'lucide-react';
+import { Bot, CheckCircle2, ExternalLink, Mail, MessageCircle, MessageSquare, Paperclip, Plus, RefreshCw, Send, Sparkles, Upload, UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,6 +17,27 @@ import { cn } from '@/lib/utils';
 import type { Conversation, Message, Tenant } from '@/db';
 
 type ConversationWithTenant = Conversation & { tenants: Pick<Tenant, 'first_name' | 'last_name'> | null };
+
+type GmailConnectionSummary = {
+  id: string;
+  email: string;
+  status: 'connected' | 'revoked' | 'error';
+  last_sync_at: string | null;
+};
+
+type GmailThreadSummary = {
+  id: string;
+  thread_id: string;
+  message_id: string | null;
+  from_email: string | null;
+  from_name: string | null;
+  to_emails: string[];
+  subject: string | null;
+  snippet: string | null;
+  received_at: string | null;
+  labels: string[];
+  unread: boolean;
+};
 
 const CATEGORY_COLORS: Record<Conversation['category'], string> = {
   maintenance: 'bg-orange-100 text-orange-700 border-orange-200',
@@ -81,7 +102,6 @@ export function InboxView() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [compose, setCompose] = useState('');
-  const [sendRole, setSendRole] = useState<'manager' | 'tenant'>('manager');
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
   const [newConvOpen, setNewConvOpen] = useState(false);
@@ -91,14 +111,39 @@ export function InboxView() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [gmailConnections, setGmailConnections] = useState<GmailConnectionSummary[]>([]);
+  const [gmailThreads, setGmailThreads] = useState<GmailThreadSummary[]>([]);
+  const [selectedGmailThread, setSelectedGmailThread] = useState<GmailThreadSummary | null>(null);
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [gmailError, setGmailError] = useState('');
+  const [gmailNotice, setGmailNotice] = useState('');
+  const [gmailDraft, setGmailDraft] = useState('');
+  const [gmailDrafting, setGmailDrafting] = useState(false);
+  const [gmailDraftStatus, setGmailDraftStatus] = useState('');
 
   useEffect(() => {
     if (!activeWorkspace) return;
     loadConversations();
+    loadGmailConnections();
     supabase.from('tenants').select('*').eq('workspace_id', activeWorkspace.id)
       .then(({ data }) => setTenants((data ?? []) as Tenant[]));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeWorkspace?.id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('gmail');
+    if (!status) return;
+
+    if (status === 'connected') setGmailNotice('Gmail connecté.');
+    if (status === 'error') setGmailError(params.get('message') || 'Connexion Gmail impossible.');
+
+    params.delete('gmail');
+    params.delete('message');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;
+    window.history.replaceState(null, '', nextUrl);
+  }, []);
 
   // Realtime: subscribe to new messages for selected conversation
   useEffect(() => {
@@ -148,6 +193,97 @@ export function InboxView() {
     setMessages((data ?? []) as Message[]);
   }
 
+  async function loadGmailConnections() {
+    if (!activeWorkspace) return;
+    setGmailError('');
+    try {
+      const res = await fetch(`/api/gmail/connections?workspace_id=${activeWorkspace.id}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Connexion Gmail indisponible');
+      const connections = (data.connections ?? []) as GmailConnectionSummary[];
+      setGmailConnections(connections);
+      if (connections.length > 0) await loadGmailThreads(connections[0].id);
+    } catch (e) {
+      setGmailError(e instanceof Error ? e.message : 'Connexion Gmail indisponible');
+    }
+  }
+
+  async function loadGmailThreads(connectionId?: string) {
+    if (!activeWorkspace) return;
+    const id = connectionId ?? gmailConnections[0]?.id;
+    if (!id) return;
+    setGmailLoading(true);
+    setGmailError('');
+    try {
+      const params = new URLSearchParams({
+        workspace_id: activeWorkspace.id,
+        connection_id: id,
+      });
+      const res = await fetch(`/api/gmail/threads?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Lecture Gmail impossible');
+      setGmailThreads((data.threads ?? []) as GmailThreadSummary[]);
+    } catch (e) {
+      setGmailError(e instanceof Error ? e.message : 'Lecture Gmail impossible');
+    } finally {
+      setGmailLoading(false);
+    }
+  }
+
+  function handleConnectGmail() {
+    if (!activeWorkspace) return;
+    window.location.href = `/api/gmail/connect?workspace_id=${activeWorkspace.id}`;
+  }
+
+  function selectConversation(conversation: ConversationWithTenant) {
+    setSelectedGmailThread(null);
+    setGmailDraftStatus('');
+    setSelected(conversation);
+  }
+
+  function selectGmailThread(thread: GmailThreadSummary) {
+    setSelected(null);
+    setSelectedGmailThread(thread);
+    setGmailDraftStatus('');
+    setGmailDraft(`Bonjour,\n\n`);
+  }
+
+  async function handleCreateGmailDraft() {
+    if (!activeWorkspace || !selectedGmailThread || !gmailConnections[0]) return;
+    const to = selectedGmailThread.from_email;
+    if (!to) {
+      setGmailDraftStatus('Adresse expéditeur introuvable.');
+      return;
+    }
+
+    setGmailDrafting(true);
+    setGmailDraftStatus('');
+    try {
+      const subject = selectedGmailThread.subject?.startsWith('Re:')
+        ? selectedGmailThread.subject
+        : `Re: ${selectedGmailThread.subject || '(Sans objet)'}`;
+      const res = await fetch('/api/gmail/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: activeWorkspace.id,
+          connection_id: gmailConnections[0].id,
+          to,
+          subject,
+          body: gmailDraft.trim(),
+          thread_id: selectedGmailThread.thread_id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Brouillon Gmail impossible');
+      setGmailDraftStatus('Brouillon créé dans Gmail.');
+    } catch (e) {
+      setGmailDraftStatus(e instanceof Error ? e.message : 'Brouillon Gmail impossible');
+    } finally {
+      setGmailDrafting(false);
+    }
+  }
+
   async function handleSend() {
     if (!compose.trim() || !selected || !activeWorkspace) return;
     setSending(true);
@@ -155,50 +291,11 @@ export function InboxView() {
       conversation_id: selected.id,
       workspace_id: activeWorkspace.id,
       content: compose.trim(),
-      role: sendRole,
+      role: 'manager',
     });
-
-    // Auto-classify if tenant message
-    if (sendRole === 'tenant') {
-      classifyAndUpdate(selected.id, compose.trim(), selected.tenant_id ?? null);
-    }
 
     setCompose('');
     setSending(false);
-  }
-
-  async function classifyAndUpdate(convId: string, message: string, tenantId?: string | null) {
-    if (!activeWorkspace) return;
-    try {
-      const res = await fetch('/api/agent/classify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspace_id: activeWorkspace.id,
-          conversation_id: convId,
-          tenant_id: tenantId ?? null,
-          message,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        const { category } = data;
-        if (category) {
-          await supabase.from('conversations').update({ category }).eq('id', convId);
-          setConversations(prev =>
-            prev.map(c => c.id === convId ? { ...c, category } : c)
-          );
-          if (selected?.id === convId) {
-            setSelected(prev => prev ? { ...prev, category } : prev);
-          }
-        }
-        setAiError('');
-      } else {
-        setAiError(agentErrorMessage(data));
-      }
-    } catch {
-      setAiError('Agent IA indisponible.');
-    }
   }
 
   async function handleAiDraft() {
@@ -229,7 +326,6 @@ export function InboxView() {
       if (res.ok) {
         const { draft } = data;
         setCompose(draft ?? '');
-        setSendRole('manager');
         setAiError('');
       } else {
         setAiError(agentErrorMessage(data));
@@ -259,15 +355,14 @@ export function InboxView() {
         conversation_id: conv.id,
         workspace_id: activeWorkspace.id,
         content: newConv.first_message.trim(),
-        role: 'tenant',
+        role: 'manager',
       });
-      // Auto-classify first message
-      classifyAndUpdate(conv.id, newConv.first_message.trim(), newConv.tenant_id);
     }
 
     if (conv) {
       const c = conv as ConversationWithTenant;
       setConversations(prev => [c, ...prev]);
+      setSelectedGmailThread(null);
       setSelected(c);
     }
 
@@ -354,6 +449,81 @@ export function InboxView() {
           ))}
         </div>
 
+        <div className="border-b bg-background/60 px-3 py-2.5">
+          {gmailConnections.length === 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold">Gmail</p>
+                  <p className="text-[11px] leading-4 text-muted-foreground">Connectez la boîte du gestionnaire.</p>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={handleConnectGmail}>
+                  Connecter
+                </Button>
+              </div>
+              {gmailNotice && <p className="text-[11px] text-emerald-600">{gmailNotice}</p>}
+              {gmailError && <p className="text-[11px] text-destructive">{gmailError}</p>}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="size-3 text-emerald-500" />
+                    <p className="truncate text-xs font-semibold">{gmailConnections[0].email}</p>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Emails Gmail</p>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 rounded-lg"
+                  onClick={() => loadGmailThreads(gmailConnections[0].id)}
+                  disabled={gmailLoading}
+                  title="Rafraîchir Gmail"
+                >
+                  <RefreshCw className={cn('size-3.5', gmailLoading && 'animate-spin')} />
+                </Button>
+              </div>
+              {gmailNotice && <p className="text-[11px] text-emerald-600">{gmailNotice}</p>}
+              {gmailError && <p className="text-[11px] text-destructive">{gmailError}</p>}
+              <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+                {gmailThreads.length === 0 ? (
+                  <p className="rounded-lg border bg-card px-2 py-2 text-[11px] text-muted-foreground">
+                    {gmailLoading ? 'Synchronisation Gmail...' : 'Aucun email récent.'}
+                  </p>
+                ) : gmailThreads.map(thread => {
+                  const active = selectedGmailThread?.thread_id === thread.thread_id;
+                  return (
+                    <button
+                      key={thread.thread_id}
+                      type="button"
+                      onClick={() => selectGmailThread(thread)}
+                      className={cn(
+                        'w-full rounded-lg border px-2 py-2 text-left transition-colors hover:bg-card',
+                        active ? 'border-brand bg-brand-muted' : 'border-transparent bg-transparent'
+                      )}
+                    >
+                      <div className="mb-0.5 flex items-center gap-2">
+                        <Mail className={cn('size-3 shrink-0', thread.unread ? 'text-brand' : 'text-muted-foreground')} />
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">
+                          {thread.subject || '(Sans objet)'}
+                        </span>
+                        <span className="shrink-0 text-[9px] text-muted-foreground">
+                          {thread.received_at ? fmtTime(thread.received_at) : ''}
+                        </span>
+                      </div>
+                      <p className="truncate pl-5 text-[10px] text-muted-foreground">
+                        {thread.from_name || thread.from_email || 'Expéditeur inconnu'}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           {conversations.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
@@ -374,7 +544,7 @@ export function InboxView() {
                 return (
                   <button
                     key={c.id}
-                    onClick={() => setSelected(c)}
+                    onClick={() => selectConversation(c)}
                     className={cn(
                       'w-full border-l-2 border-transparent px-4 py-3 text-left transition-colors hover:bg-background',
                       active && 'border-brand bg-brand-muted'
@@ -407,7 +577,85 @@ export function InboxView() {
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col bg-background">
-        {!selected ? (
+        {selectedGmailThread ? (
+          <>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-card px-4 py-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Mail className="size-4 text-brand" />
+                  <p className="truncate text-sm font-semibold">{selectedGmailThread.subject || '(Sans objet)'}</p>
+                </div>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {selectedGmailThread.from_name || selectedGmailThread.from_email || 'Expéditeur inconnu'}
+                  {selectedGmailThread.received_at ? ` · ${fmtTime(selectedGmailThread.received_at)}` : ''}
+                </p>
+              </div>
+              <Badge variant="outline" className="shrink-0 text-[10px]">Gmail</Badge>
+            </div>
+
+            <div className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.45fr)_minmax(420px,1fr)] overflow-hidden">
+              <div className="flex min-w-0 flex-col border-r bg-card">
+                <div className="space-y-3 border-b p-4">
+                  <p className="text-xs font-semibold text-muted-foreground">Message reçu</p>
+                  <div className="rounded-xl border bg-background p-3 text-sm leading-6">
+                    {selectedGmailThread.snippet || 'Aucun aperçu disponible.'}
+                  </div>
+                  <div className="grid gap-1 text-xs text-muted-foreground">
+                    <span>De : {selectedGmailThread.from_email || 'inconnu'}</span>
+                    <span>Vers : {selectedGmailThread.to_emails.join(', ') || gmailConnections[0]?.email || 'Gmail'}</span>
+                  </div>
+                </div>
+                <div className="flex flex-1 flex-col gap-3 p-4">
+                  <div>
+                    <p className="text-sm font-semibold">Brouillon Gmail</p>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      Préparez une réponse. isimple crée un brouillon dans Gmail, sans envoi automatique.
+                    </p>
+                  </div>
+                  <textarea
+                    value={gmailDraft}
+                    onChange={e => setGmailDraft(e.target.value)}
+                    className="min-h-[220px] flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm leading-6 shadow-sm focus:outline-none"
+                    placeholder="Rédigez ou collez le brouillon à créer dans Gmail..."
+                  />
+                  {gmailDraftStatus && (
+                    <p className={cn(
+                      'text-xs',
+                      gmailDraftStatus.includes('créé') ? 'text-emerald-600' : 'text-destructive'
+                    )}>
+                      {gmailDraftStatus}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleCreateGmailDraft}
+                      disabled={gmailDrafting || !gmailDraft.trim()}
+                      className="flex-1 gap-2 bg-brand text-brand-foreground hover:bg-brand/90"
+                    >
+                      <Mail className="size-4" />
+                      {gmailDrafting ? 'Création...' : 'Créer le brouillon'}
+                    </Button>
+                    <Button asChild variant="outline" className="gap-2">
+                      <a href="https://mail.google.com/" target="_blank" rel="noreferrer">
+                        Gmail
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-center bg-muted/30 p-8 text-center text-muted-foreground">
+                <div className="max-w-md">
+                  <Mail className="mx-auto mb-3 size-8 opacity-40" />
+                  <p className="text-sm font-medium text-foreground">Aperçu Gmail natif non embarqué</p>
+                  <p className="mt-2 text-xs leading-5">
+                    L&apos;API Gmail fournit le contenu et les métadonnées pour l&apos;agent. Pour le rendu complet du fil, ouvrez Gmail ou transformez l&apos;email en conversation isimple.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : !selected ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
             <div className="flex size-12 items-center justify-center rounded-2xl border bg-card">
               <MessageSquare className="size-6 opacity-40" />
@@ -466,7 +714,7 @@ export function InboxView() {
                     <div className={cn('flex max-w-[78%] flex-col', isManager || isAi ? 'items-end' : 'items-start')}>
                       <div className="mb-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         {isAi ? <Bot className="size-3 text-brand" /> : isManager ? <UserRound className="size-3" /> : <MessageCircle className="size-3" />}
-                        <span>{isAi ? 'Agent IA' : isManager ? t.inbox.manager : t.inbox.tenant}</span>
+                        <span>{isAi ? 'Agent IA' : isManager ? 'Gestionnaire' : 'Locataire'}</span>
                         <span>·</span>
                         <span>{fmtTime(msg.created_at)}</span>
                       </div>
@@ -488,26 +736,9 @@ export function InboxView() {
             </div>
 
             <div className="shrink-0 border-t bg-card p-3">
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>{t.inbox.sendAs} :</span>
-                <button
-                  type="button"
-                  onClick={() => setSendRole('manager')}
-                  className={cn('rounded-full px-2 py-1 transition-colors', sendRole === 'manager' ? 'bg-foreground text-background' : 'bg-muted hover:text-foreground')}
-                >
-                  {t.inbox.manager}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSendRole('tenant')}
-                  className={cn('rounded-full px-2 py-1 transition-colors', sendRole === 'tenant' ? 'bg-foreground text-background' : 'bg-muted hover:text-foreground')}
-                >
-                  {t.inbox.tenant}
-                </button>
-                <span className="ml-auto hidden items-center gap-1 text-[11px] sm:flex">
-                  <CircleDot className="size-3 text-emerald-500" />
-                  Entrée pour envoyer
-                </span>
+              <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>Réponse gestionnaire</span>
+                <span className="hidden sm:block">Entrée pour envoyer</span>
               </div>
               <div className="flex gap-2">
                 <input
@@ -575,7 +806,7 @@ export function InboxView() {
               <Input
                 value={newConv.subject}
                 onChange={e => setNewConv(p => ({ ...p, subject: e.target.value }))}
-                placeholder="Ex : Fuite d'eau dans la salle de bain"
+                placeholder="Ex : Suivi du bail"
               />
             </div>
             <div className="space-y-2">
@@ -583,7 +814,7 @@ export function InboxView() {
               <textarea
                 value={newConv.first_message}
                 onChange={e => setNewConv(p => ({ ...p, first_message: e.target.value }))}
-                placeholder="Bonjour, j'ai constaté une fuite d'eau..."
+                placeholder="Bonjour, je vous contacte au sujet de..."
                 className="flex w-full min-h-[80px] resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>

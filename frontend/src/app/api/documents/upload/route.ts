@@ -45,6 +45,22 @@ Retourne UNIQUEMENT du JSON valide (null ou [] si inconnu) :
 type PropertyType = 'apartment' | 'house' | 'studio' | 'parking' | 'commercial' | 'other';
 const PROPERTY_TYPES: PropertyType[] = ['apartment', 'house', 'studio', 'parking', 'commercial', 'other'];
 
+type SuggestedNewLot = {
+  address: string;
+  city: string;
+  postal_code: string;
+  type: PropertyType;
+  area_m2: number | null;
+  rent_amount: number;
+  charges_amount: number;
+};
+
+type SuggestedNewTenant = {
+  first_name: string;
+  last_name: string;
+  email: string | null;
+};
+
 function normalizeText(s: string): string {
   return s
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -84,12 +100,6 @@ function normalizeEmail(s: string): string {
   return s.trim().toLowerCase();
 }
 
-function generatePlaceholderEmail(first: string, last: string): string {
-  const slug = normalizeText(`${first}.${last}`).replace(/\s+/g, '.');
-  const suffix = Math.random().toString(36).slice(2, 6);
-  return `${slug}.${suffix}@placeholder.local`;
-}
-
 function safeFileName(name: string): string {
   const cleaned = name
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -110,6 +120,43 @@ function uniqueIds(ids: Array<string | null | undefined>): string[] {
 
 function safePathSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'documents';
+}
+
+function extractJsonCandidate(text: string): string | null {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
+
+async function parseExtractionJson(rawText: string): Promise<Record<string, unknown>> {
+  const candidate = extractJsonCandidate(rawText);
+  if (!candidate) return {};
+  try {
+    return JSON.parse(candidate) as Record<string, unknown>;
+  } catch {
+    const repaired = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text:
+              'Repair this malformed JSON object. Return ONLY valid JSON, no markdown, no explanation.\n\n'
+              + candidate,
+          },
+        ],
+      }],
+    });
+    const repairedText = repaired.content
+      .filter(block => block.type === 'text')
+      .map(block => block.text)
+      .join('\n');
+    const repairedCandidate = extractJsonCandidate(repairedText);
+    return repairedCandidate ? JSON.parse(repairedCandidate) as Record<string, unknown> : {};
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -189,16 +236,18 @@ export async function POST(req: NextRequest) {
         messages: [{ role: 'user', content }],
       });
 
-      const text = response.content[0].type === 'text' ? response.content[0].text : '';
-      const match = text.match(/\{[\s\S]*\}/);
-      if (match) extractedData = JSON.parse(match[0]);
+      const text = response.content
+        .filter(block => block.type === 'text')
+        .map(block => block.text)
+        .join('\n');
+      extractedData = await parseExtractionJson(text);
     } catch (aiErr) {
       console.warn('[documents/upload] AI extraction failed:', aiErr);
     }
 
-    // ---------- Match or auto-create the lot ----------
+    // ---------- Match the lot or prepare a new-lot suggestion ----------
     let suggestedLotId: string | null = null;
-    let createdLotId: string | null = null;
+    let suggestedNewLot: SuggestedNewLot | null = null;
     const reviewFlags: string[] = [];
 
     if (contextLotId) {
@@ -254,34 +303,22 @@ export async function POST(req: NextRequest) {
       if (best && best.score >= 50) {
         suggestedLotId = best.id;
       } else if (propAddress && propCity && propPostal) {
-        // Auto-create the lot when we have the three essential fields.
-        const { data: newLot, error: lotErr } = await admin
-          .from('lots')
-          .insert({
-            workspace_id: workspaceId,
-            address: propAddress,
-            city: propCity,
-            postal_code: propPostal,
-            type: propType,
-            area_m2: propArea,
-            rent_amount: rentAmount,
-            charges_amount: chargesAmount,
-          })
-          .select('id')
-          .single();
-        if (!lotErr && newLot) {
-          suggestedLotId = newLot.id;
-          createdLotId = newLot.id;
-        } else if (lotErr) {
-          console.warn('[documents/upload] auto-create lot failed:', lotErr);
-        }
+        suggestedNewLot = {
+          address: propAddress,
+          city: propCity,
+          postal_code: propPostal,
+          type: propType,
+          area_m2: propArea,
+          rent_amount: rentAmount,
+          charges_amount: chargesAmount,
+        };
       }
     }
     if (propAddress && suggestedLotId) {
       reviewFlags.push('property_address_extracted');
     }
 
-    // ---------- Match or auto-create tenants ----------
+    // ---------- Match tenants or prepare new-tenant suggestions ----------
     const extractedTenants = Array.isArray(extractedData.tenants)
       ? (extractedData.tenants as Array<{ first_name?: string; last_name?: string; email?: string | null }>)
       : [];
@@ -306,7 +343,7 @@ export async function POST(req: NextRequest) {
       .eq('workspace_id', workspaceId);
 
     const suggestedTenantIds: string[] = [];
-    const createdTenantIds: string[] = [];
+    const suggestedNewTenants: SuggestedNewTenant[] = [];
 
     for (const t of dedupedExtracted) {
       const fn = (t.first_name ?? '').trim();
@@ -335,26 +372,11 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // No match — auto-create. Use extracted email if provided, otherwise a placeholder
-      // the user can fix from the tenants page.
-      const email = emailNorm || generatePlaceholderEmail(fn, ln);
-      const { data: newTenant, error: tErr } = await admin
-        .from('tenants')
-        .insert({
-          workspace_id: workspaceId,
-          first_name: fn,
-          last_name: ln,
-          email,
-        })
-        .select('id')
-        .single();
-      if (!tErr && newTenant) {
-        suggestedTenantIds.push(newTenant.id);
-        createdTenantIds.push(newTenant.id);
-        allTenants?.push({ id: newTenant.id, first_name: fn, last_name: ln, email });
-      } else if (tErr) {
-        console.warn('[documents/upload] auto-create tenant failed:', tErr);
-      }
+      suggestedNewTenants.push({
+        first_name: fn,
+        last_name: ln,
+        email: emailNorm || null,
+      });
     }
 
     if (contextTenantId) {
@@ -371,13 +393,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (!suggestedLotId) reviewFlags.push('missing_property_match');
-    if (suggestedTenantIds.length === 0 && dedupedExtracted.length > 0) reviewFlags.push('missing_tenant_match');
+    if (!suggestedLotId) {
+      reviewFlags.push(suggestedNewLot ? 'new_property_suggested' : 'missing_property_match');
+    }
+    if (suggestedTenantIds.length === 0 && dedupedExtracted.length > 0) {
+      reviewFlags.push(suggestedNewTenants.length > 0 ? 'new_tenant_suggested' : 'missing_tenant_match');
+    }
     if ((extractedData.doc_type as string | undefined) === 'autre') reviewFlags.push('unknown_document_type');
     if (dedupedExtracted.length > 1) reviewFlags.push('multiple_tenants_detected');
 
     extractedData = {
       ...extractedData,
+      suggested_new_lot: suggestedNewLot,
+      suggested_new_tenants: suggestedNewTenants,
       _pipeline: {
         source,
         provider: 'anthropic',
@@ -432,6 +460,8 @@ export async function POST(req: NextRequest) {
         review_flags: reviewFlags,
         suggested_lot_id: suggestedLotId,
         suggested_tenant_ids: linkedTenantIds,
+        suggested_new_lot: suggestedNewLot,
+        suggested_new_tenants: suggestedNewTenants,
       },
       attempts: 1,
       started_at: new Date().toISOString(),
@@ -460,8 +490,10 @@ export async function POST(req: NextRequest) {
       suggested_lot_id: suggestedLotId,
       suggested_tenant_id: suggestedTenantId,
       suggested_tenant_ids: linkedTenantIds,
-      created_lot_id: createdLotId,
-      created_tenant_ids: createdTenantIds,
+      suggested_new_lot: suggestedNewLot,
+      suggested_new_tenants: suggestedNewTenants,
+      created_lot_id: null,
+      created_tenant_ids: [],
     }, { status: 201 });
   } catch (e) {
     console.error('[documents/upload]', e);

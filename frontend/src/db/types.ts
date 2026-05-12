@@ -14,6 +14,7 @@ export type VectorStoreProvider = 'openai' | 'pinecone' | 'supabase';
 export type VectorStoreScope = 'workspace' | 'tenant' | 'lot';
 export type VectorStoreStatus = 'pending' | 'ready' | 'syncing' | 'failed' | 'deleted';
 export type DocumentExternalFileStatus = 'queued' | 'uploading' | 'indexed' | 'failed' | 'deleted';
+export type GmailConnectionStatus = 'connected' | 'revoked' | 'error';
 
 export interface Database {
   public: {
@@ -509,6 +510,112 @@ export interface Database {
           updated_at?: string;
         };
       };
+      gmail_connections: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          user_id: string;
+          email: string;
+          access_token_encrypted: string;
+          refresh_token_encrypted: string | null;
+          scope: string[];
+          token_type: string | null;
+          expires_at: string | null;
+          status: GmailConnectionStatus;
+          last_sync_at: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          user_id: string;
+          email: string;
+          access_token_encrypted: string;
+          refresh_token_encrypted?: string | null;
+          scope?: string[];
+          token_type?: string | null;
+          expires_at?: string | null;
+          status?: GmailConnectionStatus;
+          last_sync_at?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          user_id?: string;
+          email?: string;
+          access_token_encrypted?: string;
+          refresh_token_encrypted?: string | null;
+          scope?: string[];
+          token_type?: string | null;
+          expires_at?: string | null;
+          status?: GmailConnectionStatus;
+          last_sync_at?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      gmail_threads_cache: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          gmail_connection_id: string;
+          thread_id: string;
+          message_id: string | null;
+          from_email: string | null;
+          from_name: string | null;
+          to_emails: string[];
+          subject: string | null;
+          snippet: string | null;
+          received_at: string | null;
+          labels: string[];
+          unread: boolean;
+          raw: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          gmail_connection_id: string;
+          thread_id: string;
+          message_id?: string | null;
+          from_email?: string | null;
+          from_name?: string | null;
+          to_emails?: string[];
+          subject?: string | null;
+          snippet?: string | null;
+          received_at?: string | null;
+          labels?: string[];
+          unread?: boolean;
+          raw?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          gmail_connection_id?: string;
+          thread_id?: string;
+          message_id?: string | null;
+          from_email?: string | null;
+          from_name?: string | null;
+          to_emails?: string[];
+          subject?: string | null;
+          snippet?: string | null;
+          received_at?: string | null;
+          labels?: string[];
+          unread?: boolean;
+          raw?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       messages: {
         Row: {
           id: string;
@@ -551,6 +658,8 @@ export type DocumentDelivery = Database['public']['Tables']['document_deliveries
 export type DocumentTenant = Database['public']['Tables']['document_tenants']['Row'];
 export type WorkspaceVectorStore = Database['public']['Tables']['workspace_vector_stores']['Row'];
 export type DocumentExternalFile = Database['public']['Tables']['document_external_files']['Row'];
+export type GmailConnection = Database['public']['Tables']['gmail_connections']['Row'];
+export type GmailThreadCache = Database['public']['Tables']['gmail_threads_cache']['Row'];
 export type Workspace = Database['public']['Tables']['workspaces']['Row'];
 export type WorkspaceMember = Database['public']['Tables']['workspace_members']['Row'];
 export type WorkspaceInvitation = Database['public']['Tables']['workspace_invitations']['Row'];

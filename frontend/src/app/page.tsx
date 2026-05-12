@@ -11,6 +11,7 @@ import {
   Ticket,
   Users,
 } from 'lucide-react';
+import { absoluteUrl, siteConfig } from '@/lib/site';
 
 const features = [
   {
@@ -43,8 +44,66 @@ const previewRows = [
 ] as const;
 
 export default function LandingPage() {
+  const structuredData = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: siteConfig.name,
+      url: absoluteUrl('/'),
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'isimple',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      url: absoluteUrl('/'),
+      description: siteConfig.description,
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'EUR',
+        availability: 'https://schema.org/InStock',
+      },
+      featureList: [
+        'Gestion locative centralisée',
+        'Inbox locataire avec assistance IA',
+        'Traitement et revue de documents locatifs',
+        'Recherche documentaire pour agents RAG',
+        'Brouillons Gmail validés par le gestionnaire',
+      ],
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: [
+        {
+          '@type': 'Question',
+          name: 'Que fait isimple ?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'isimple centralise les messages, documents, biens, locataires et actions de suivi pour les gestionnaires locatifs, avec une couche IA pour classer, extraire et préparer les réponses.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'Les agents peuvent-ils agir seuls ?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Les agents préparent des brouillons et recommandations, mais les actions sortantes comme les emails restent validées par le gestionnaire.',
+          },
+        },
+      ],
+    },
+  ];
+
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <nav className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/90 px-5 backdrop-blur-xl lg:px-12">
         <Link href="/" className="flex items-center gap-2 text-foreground">
           <span className="flex size-8 items-center justify-center rounded-lg bg-foreground text-background">

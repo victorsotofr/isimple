@@ -104,12 +104,9 @@ export const fr = {
     newConversation: "Nouvelle conversation",
     subject: "Sujet",
     selectTenant: "Sélectionner un locataire",
-    firstMessage: "Premier message (du locataire)",
+    firstMessage: "Premier message",
     aiDraft: "Brouillon IA",
     generating: "Génération...",
-    sendAs: "Envoyer comme",
-    manager: "Gestionnaire",
-    tenant: "Locataire",
     aiAssist: "Brouillon IA",
     categories: {
       maintenance: "Maintenance",

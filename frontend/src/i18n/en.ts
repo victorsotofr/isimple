@@ -106,12 +106,9 @@ export const en: Translations = {
     newConversation: "New conversation",
     subject: "Subject",
     selectTenant: "Select a tenant",
-    firstMessage: "First message (from tenant)",
+    firstMessage: "First message",
     aiDraft: "AI Draft",
     generating: "Generating...",
-    sendAs: "Send as",
-    manager: "Manager",
-    tenant: "Tenant",
     aiAssist: "AI Draft",
     categories: {
       maintenance: "Maintenance",

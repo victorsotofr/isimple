@@ -100,11 +100,11 @@ export function AppSidebar() {
         <button
           type="button"
           onClick={() => setCommandOpen(true)}
-          className="mt-3 flex w-full items-center gap-2 rounded-lg border border-[#3a3a38] bg-sidebar-accent px-2.5 py-1.5 text-left text-xs text-[#8a8a85] transition-colors hover:text-sidebar-foreground"
+          className="mt-3 flex w-full items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-sidebar-foreground"
         >
           <Search className="size-3.5" />
           <span className="flex-1">Rechercher...</span>
-          <kbd className="rounded border border-[#3a3a38] bg-[#1c1c1a] px-1.5 py-0.5 text-[10px] text-[#6a6a65]">
+          <kbd className="rounded border border-sidebar-border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
             ⌘K
           </kbd>
         </button>
@@ -143,7 +143,7 @@ export function AppSidebar() {
             <SidebarMenuButton
               isActive={pathname.startsWith('/settings')}
               onClick={() => go('/settings')}
-              className="rounded-lg text-[#8a8a85] hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-brand-muted data-[active=true]:text-sidebar-foreground"
+              className="rounded-lg text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground data-[active=true]:bg-brand-muted data-[active=true]:text-sidebar-foreground"
             >
               <Settings className="size-4" />
               <span>{t.nav.settings}</span>
@@ -178,7 +178,7 @@ function WorkspaceName({ name, loading }: { name?: string; loading: boolean }) {
       <span className="font-serif truncate text-[17px] text-sidebar-foreground">
         isimple
       </span>
-      <span className="truncate text-[10px] text-[#6a6a65]">
+      <span className="truncate text-[10px] text-muted-foreground">
         {loading ? '...' : (name ?? 'Espace immobilier')}
       </span>
     </div>
@@ -206,14 +206,14 @@ function NavSection({
               isActive={active}
               onClick={() => onNavigate(href)}
               className={cn(
-                'rounded-lg px-2.5 text-[13px] text-[#8a8a85] transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
+                'rounded-lg px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground',
                 'data-[active=true]:bg-brand-muted data-[active=true]:text-sidebar-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--brand)]'
               )}
             >
               <Icon className="size-3.5" />
               <span>{labels[key]}</span>
               {key === 'inbox' && (
-                <span className="ml-auto rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] text-[#c0bfba]">
+                <span className="ml-auto rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   IA
                 </span>
               )}
@@ -255,14 +255,14 @@ function UserButton({ onNavigate }: { onNavigate: (href: string) => void }) {
     <SidebarMenuButton
       size="lg"
       onClick={() => onNavigate('/profile')}
-      className="mt-1 h-auto rounded-lg bg-sidebar-accent px-2 py-2 text-sidebar-foreground hover:bg-[#333330]"
+      className="mt-1 h-auto rounded-lg bg-sidebar-accent px-2 py-2 text-sidebar-foreground hover:bg-brand-muted"
     >
       <Avatar className="size-7 rounded-full">
         <AvatarFallback className="rounded-full bg-brand text-[10px] font-bold text-brand-foreground">{initials}</AvatarFallback>
       </Avatar>
       <div className="grid flex-1 text-left text-sm leading-tight">
         <span className="truncate text-xs font-medium">{displayName}</span>
-        <span className="truncate text-[10px] text-[#6a6a65]">{email ?? '...'}</span>
+        <span className="truncate text-[10px] text-muted-foreground">{email ?? '...'}</span>
       </div>
     </SidebarMenuButton>
   );

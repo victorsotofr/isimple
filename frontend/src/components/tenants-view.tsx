@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Plus, Users, Sparkles, Pencil, Trash2, FileText } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Plus, Users, Sparkles, Pencil, Trash2, FileText, Upload } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -42,6 +42,7 @@ type TenantWithLot = Tenant & {
 export function TenantsView() {
   const { t } = useLanguage();
   const { activeWorkspace } = useWorkspace();
+  const router = useRouter();
   const supabase = createClient();
   const searchParams = useSearchParams();
   const editParam = searchParams.get('edit');
@@ -341,6 +342,29 @@ export function TenantsView() {
           </DialogHeader>
 
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {!editing && (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-sm font-medium">Créer depuis un document</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Déposez un bail, une pièce ou une quittance : isimple extraira le locataire,
+                  proposera la création si aucun profil ne correspond, puis vous confirmerez.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    handleDialogChange(false);
+                    router.push('/documents/upload?source=tenant_create');
+                  }}
+                >
+                  <Upload className="size-3.5 mr-1.5" />
+                  Importer un document
+                </Button>
+              </div>
+            )}
+
             {showAI && (
               <SmartFillPanel
                 type="tenant"

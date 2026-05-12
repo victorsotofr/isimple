@@ -4,11 +4,11 @@ export type {
   Workspace, WorkspaceMember, WorkspaceInvitation,
   Lot, Tenant, Lease, Conversation, Message,
   Document, DocumentDelivery, DocumentProcessingJob, DocumentTenant,
-  WorkspaceVectorStore, DocumentExternalFile,
+  WorkspaceVectorStore, DocumentExternalFile, GmailConnection, GmailThreadCache,
   DocumentType, DocumentVisibility, DocumentProcessingStatus, DocumentDeliveryChannel,
   DocumentRecipientType, DocumentDeliveryStatus, DocumentProcessingJobStage,
   DocumentProcessingJobStatus, VectorStoreProvider, VectorStoreScope, VectorStoreStatus,
-  DocumentExternalFileStatus,
+  DocumentExternalFileStatus, GmailConnectionStatus,
   WorkspaceRole, InvitationStatus, LotType, LeaseStatus,
   ConversationCategory, ConversationStatus, MessageRole,
 } from './types';

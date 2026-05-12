@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { Upload, FileText, X, Loader2, CheckCircle2, UserPlus, Plus, AlertCircle, ChevronLeft, ChevronRight, Trash2, ListChecks } from 'lucide-react';
+import { Upload, FileText, X, Loader2, CheckCircle2, UserPlus, Plus, AlertCircle, ChevronLeft, ChevronRight, Trash2, ListChecks, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useWorkspace } from '@/contexts/workspace-context';
 import { createClient } from '@/lib/supabase-browser';
 import type { Lot, Tenant } from '@/db';
@@ -40,10 +41,28 @@ type ExtractedData = {
   document_date?: string | null;
   rent_amount?: number | null;
   summary?: string | null;
+  suggested_new_lot?: SuggestedNewLot | null;
+  suggested_new_tenants?: SuggestedNewTenant[];
   _pipeline?: {
     source?: string | null;
     review_flags?: string[];
   } | null;
+};
+
+type SuggestedNewLot = {
+  address: string;
+  city: string;
+  postal_code: string;
+  type: 'apartment' | 'house' | 'studio' | 'parking' | 'commercial' | 'other';
+  area_m2: number | null;
+  rent_amount: number;
+  charges_amount: number;
+};
+
+type SuggestedNewTenant = {
+  first_name: string;
+  last_name: string;
+  email: string | null;
 };
 
 function getExtractedTenants(d: ExtractedData): ExtractedTenant[] {
@@ -71,6 +90,15 @@ function findMatchingTenant(extracted: ExtractedTenant, tenants: Tenant[]): Tena
   );
 }
 
+function suggestedTenantKey(t: SuggestedNewTenant, index: number): string {
+  return `${normalizeForMatch(t.first_name)}|${normalizeForMatch(t.last_name)}|${t.email ?? ''}|${index}`;
+}
+
+function placeholderEmail(first: string, last: string): string {
+  const slug = normalizeForMatch(`${first}.${last}`).replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '') || 'locataire';
+  return `${slug}.${Math.random().toString(36).slice(2, 6)}@placeholder.local`;
+}
+
 function reviewFlagLabel(flag: string): string {
   const labels: Record<string, string> = {
     context_lot_not_found: 'Bien source introuvable',
@@ -78,6 +106,8 @@ function reviewFlagLabel(flag: string): string {
     property_address_extracted: 'Adresse extraite',
     missing_property_match: 'Bien à confirmer',
     missing_tenant_match: 'Locataire à confirmer',
+    new_property_suggested: 'Nouveau bien proposé',
+    new_tenant_suggested: 'Nouveau locataire proposé',
     unknown_document_type: 'Type incertain',
     multiple_tenants_detected: 'Colocation détectée',
   };
@@ -95,6 +125,10 @@ type ReviewState = {
   tenant_ids: string[];
   created_lot_id?: string | null;
   created_tenant_ids?: string[];
+  suggested_new_lot?: SuggestedNewLot | null;
+  suggested_new_tenants?: SuggestedNewTenant[];
+  create_lot: boolean;
+  create_tenant_keys: string[];
 };
 
 type QueueItem = {
@@ -163,6 +197,8 @@ function UploadContent() {
           ? linkedIds
           : data.tenant_id ? [data.tenant_id] : [];
         const extracted = (data.extracted_data as ExtractedData) ?? {};
+        const suggestedNewLot = extracted.suggested_new_lot ?? null;
+        const suggestedNewTenants = extracted.suggested_new_tenants ?? [];
         setReview({
           doc_id: data.id,
           file_path: data.file_path,
@@ -172,6 +208,10 @@ function UploadContent() {
           doc_type: data.doc_type,
           lot_id: data.lot_id ?? '',
           tenant_ids,
+          suggested_new_lot: suggestedNewLot,
+          suggested_new_tenants: suggestedNewTenants,
+          create_lot: !!suggestedNewLot && !data.lot_id,
+          create_tenant_keys: suggestedNewTenants.map((tenant, index) => suggestedTenantKey(tenant, index)),
         });
         setStep('review');
       })();
@@ -225,39 +265,6 @@ function UploadContent() {
     }
   };
 
-  const openReview = async (data: Record<string, unknown>) => {
-    const suggestedIds: string[] = Array.isArray(data.suggested_tenant_ids)
-      ? (data.suggested_tenant_ids as string[])
-      : data.suggested_tenant_id ? [data.suggested_tenant_id as string] : [];
-    const extracted = (data.extracted_data as ExtractedData | undefined) ?? {};
-    const createdTenantIds = Array.isArray(data.created_tenant_ids) ? (data.created_tenant_ids as string[]) : [];
-    const createdLotId = (data.created_lot_id as string | null) ?? null;
-
-    // If the server auto-created lot / tenants, re-fetch the local lists so the UI can resolve names.
-    if (activeWorkspace && (createdLotId || createdTenantIds.length > 0)) {
-      const [lotsRes, tenantsRes] = await Promise.all([
-        supabase.from('lots').select('*').eq('workspace_id', activeWorkspace.id),
-        supabase.from('tenants').select('*').eq('workspace_id', activeWorkspace.id),
-      ]);
-      setLots((lotsRes.data ?? []) as Lot[]);
-      setTenants((tenantsRes.data ?? []) as Tenant[]);
-    }
-
-    setReview({
-      doc_id: data.id as string,
-      file_path: data.file_path as string,
-      file_name: data.file_name as string,
-      signed_url: (data.signed_url as string) ?? '',
-      extracted,
-      doc_type: extracted.doc_type ?? 'autre',
-      lot_id: presetLotId ?? (data.suggested_lot_id as string | null) ?? '',
-      tenant_ids: suggestedIds,
-      created_lot_id: createdLotId,
-      created_tenant_ids: createdTenantIds,
-    });
-    setStep('review');
-  };
-
   const handleAnalyze = async () => {
     if (files.length === 0 || !activeWorkspace) return;
     setStep('analyzing');
@@ -293,16 +300,10 @@ function UploadContent() {
     }
     await Promise.all(workers);
 
-    const successes = results.filter(r => r.data);
-    // Single file success → open review screen directly (matches previous UX).
-    if (files.length === 1 && successes.length === 1 && successes[0].data) {
-      await openReview(successes[0].data);
-      return;
-    }
-
-    // Multi-file or any error: hand off to the review queue in /documents.
+    const successes = results.filter(r => r.data).sort((a, b) => a.index - b.index);
     if (successes.length > 0) {
-      setStep('done');
+      const firstReady = successes[0].data?.id;
+      router.push(firstReady ? `/documents/upload?review=${firstReady}` : '/documents?tab=review');
     } else {
       setStep('idle');
       setError('Échec de l\u2019analyse — réessayez.');
@@ -342,16 +343,64 @@ function UploadContent() {
   };
 
   const handleConfirm = async () => {
-    if (!review) return;
+    if (!review || !activeWorkspace) return;
     setStep('saving');
+    setError('');
+    let lotId = review.lot_id || null;
+    const tenantIds = [...review.tenant_ids];
+
+    try {
+      if (!lotId && review.create_lot && review.suggested_new_lot) {
+        const { data: createdLot, error: lotErr } = await supabase
+          .from('lots')
+          .insert({
+            workspace_id: activeWorkspace.id,
+            address: review.suggested_new_lot.address,
+            city: review.suggested_new_lot.city,
+            postal_code: review.suggested_new_lot.postal_code,
+            type: review.suggested_new_lot.type,
+            area_m2: review.suggested_new_lot.area_m2,
+            rent_amount: review.suggested_new_lot.rent_amount,
+            charges_amount: review.suggested_new_lot.charges_amount,
+          })
+          .select()
+          .single();
+        if (lotErr || !createdLot) throw new Error(lotErr?.message ?? 'Impossible de créer le bien');
+        lotId = createdLot.id;
+        setLots(prev => [createdLot as Lot, ...prev]);
+      }
+
+      for (const [index, tenant] of (review.suggested_new_tenants ?? []).entries()) {
+        const key = suggestedTenantKey(tenant, index);
+        if (!review.create_tenant_keys.includes(key)) continue;
+        const { data: createdTenant, error: tenantErr } = await supabase
+          .from('tenants')
+          .insert({
+            workspace_id: activeWorkspace.id,
+            first_name: tenant.first_name,
+            last_name: tenant.last_name,
+            email: tenant.email || placeholderEmail(tenant.first_name, tenant.last_name),
+          })
+          .select()
+          .single();
+        if (tenantErr || !createdTenant) throw new Error(tenantErr?.message ?? 'Impossible de créer le locataire');
+        tenantIds.push(createdTenant.id);
+        setTenants(prev => [createdTenant as Tenant, ...prev]);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur lors de la création des fiches');
+      setStep('review');
+      return;
+    }
+
     const res = await fetch(`/api/documents/${review.doc_id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: 'confirmed',
         doc_type: review.doc_type,
-        lot_id: review.lot_id || null,
-        tenant_ids: review.tenant_ids,
+        lot_id: lotId,
+        tenant_ids: Array.from(new Set(tenantIds)),
       }),
     });
     if (res.ok) {
@@ -400,7 +449,7 @@ function UploadContent() {
           <Button
             onClick={() => {
               const firstReady = queue.find(q => q.state === 'done' && q.doc_id);
-              router.push(firstReady?.doc_id ? `/documents/upload?review=${firstReady.doc_id}` : '/documents');
+              router.push(firstReady?.doc_id ? `/documents/upload?review=${firstReady.doc_id}` : '/documents?tab=review');
             }}
             disabled={succeeded === 0}
             className="flex-1"
@@ -447,8 +496,14 @@ function UploadContent() {
     };
 
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex h-[calc(100dvh-5rem)] min-h-[560px] flex-col gap-3 overflow-hidden">
+        <DocumentSectionTabs
+          active="review"
+          onUpload={() => router.push('/documents/upload')}
+          onReview={() => router.push('/documents?tab=review')}
+          onVault={() => router.push('/documents?tab=vault')}
+        />
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => router.push('/documents')}>← Documents</Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-semibold truncate">{review.file_name}</h1>
@@ -494,9 +549,9 @@ function UploadContent() {
           </Button>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[420px_minmax(0,1fr)] h-[calc(100vh-200px)] min-h-[620px]">
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[390px_minmax(0,1fr)]">
           {/* Left: extracted fields */}
-          <div className="space-y-4 overflow-y-auto pr-2">
+          <div className="min-h-0 space-y-3 overflow-y-auto pr-2">
             {pendingQueue.length > 0 && (
               <div className="rounded-lg border bg-card p-3">
                 <div className="mb-2 flex items-center justify-between">
@@ -583,6 +638,31 @@ function UploadContent() {
                     {review.extracted.property_postal_code ? ` ${review.extracted.property_postal_code}` : ''}
                   </p>
                 )}
+                {!review.lot_id && review.suggested_new_lot && (
+                  <div className="rounded-md border bg-emerald-50/70 p-3 text-sm">
+                    <div className="flex items-start gap-3">
+                      <Home className="mt-0.5 size-4 shrink-0 text-emerald-700" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-emerald-950">Nouveau bien détecté</p>
+                        <p className="mt-0.5 text-xs text-emerald-800">
+                          {review.suggested_new_lot.address}, {review.suggested_new_lot.postal_code} {review.suggested_new_lot.city}
+                        </p>
+                        <p className="mt-1 text-xs text-emerald-800/80">
+                          {review.suggested_new_lot.area_m2 ? `${review.suggested_new_lot.area_m2} m² · ` : ''}
+                          {review.suggested_new_lot.rent_amount} € HC
+                          {review.suggested_new_lot.charges_amount ? ` + ${review.suggested_new_lot.charges_amount} € charges` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <label className="mt-3 flex cursor-pointer items-center gap-2 text-xs font-medium text-emerald-950">
+                      <Checkbox
+                        checked={review.create_lot}
+                        onCheckedChange={(value) => setReview(r => r ? { ...r, create_lot: value === true } : r)}
+                      />
+                      Créer ce bien à la confirmation
+                    </label>
+                  </div>
+                )}
                 {review.created_lot_id && review.lot_id === review.created_lot_id && (
                   <p className="text-xs text-emerald-700">
                     Bien créé automatiquement — vérifiez les informations sur la fiche.
@@ -657,12 +737,45 @@ function UploadContent() {
 
                 {(() => {
                   const extracted = getExtractedTenants(review.extracted);
-                  if (extracted.length === 0) return null;
+                  const suggestedNew = review.suggested_new_tenants ?? [];
+                  if (extracted.length === 0 && suggestedNew.length === 0) return null;
                   return (
                     <div className="space-y-1 pt-2 border-t">
-                      <p className="text-xs text-muted-foreground">
-                        Extrait{extracted.length > 1 ? 's' : ''} du document :
-                      </p>
+                      {suggestedNew.length > 0 && (
+                        <div className="space-y-2 rounded-md border bg-emerald-50/70 p-3">
+                          <p className="text-xs font-medium text-emerald-950">
+                            Nouveau{suggestedNew.length > 1 ? 'x' : ''} locataire{suggestedNew.length > 1 ? 's' : ''} détecté{suggestedNew.length > 1 ? 's' : ''}
+                          </p>
+                          {suggestedNew.map((tenant, index) => {
+                            const key = suggestedTenantKey(tenant, index);
+                            const checked = review.create_tenant_keys.includes(key);
+                            return (
+                              <label key={key} className="flex cursor-pointer items-start gap-2 text-xs text-emerald-950">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(value) => setReview(r => {
+                                    if (!r) return r;
+                                    const set = new Set(r.create_tenant_keys);
+                                    if (value === true) set.add(key);
+                                    else set.delete(key);
+                                    return { ...r, create_tenant_keys: Array.from(set) };
+                                  })}
+                                />
+                                <span className="min-w-0">
+                                  <span className="font-medium">{tenant.first_name} {tenant.last_name}</span>
+                                  {tenant.email && <span className="text-emerald-800"> · {tenant.email}</span>}
+                                  <span className="block text-emerald-800/80">Créer et associer à la confirmation</span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {extracted.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Extrait{extracted.length > 1 ? 's' : ''} du document :
+                        </p>
+                      )}
                       {extracted.map((t, i) => {
                         const key = `${t.last_name}-${i}`;
                         const existing = findMatchingTenant(t, tenants);
@@ -721,7 +834,7 @@ function UploadContent() {
           </div>
 
           {/* Right: PDF preview */}
-          <div className="rounded-lg border overflow-hidden bg-muted/20">
+          <div className="min-h-0 overflow-hidden rounded-lg border bg-muted/20">
             {review.signed_url ? (
               <iframe src={review.signed_url} className="w-full h-full" title="Aperçu du document" />
             ) : (
@@ -739,6 +852,13 @@ function UploadContent() {
 
   return (
     <div className="max-w-5xl space-y-6">
+      <DocumentSectionTabs
+        active="upload"
+        onUpload={() => router.push('/documents/upload')}
+        onReview={() => router.push('/documents?tab=review')}
+        onVault={() => router.push('/documents?tab=vault')}
+      />
+
       {onboarding && (
         <div className="rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex gap-4">
@@ -767,7 +887,7 @@ function UploadContent() {
             rapproche les entités existantes et prépare une revue humaine.
           </p>
         </div>
-        <Button variant="outline" onClick={() => router.push('/documents')}>
+        <Button variant="outline" onClick={() => router.push('/documents?tab=vault')}>
           Voir le coffre-fort
         </Button>
       </div>
@@ -832,6 +952,43 @@ function UploadContent() {
           Analyser {files.length > 1 ? `${files.length} documents` : 'avec l\u2019IA'}
         </Button>
       )}
+    </div>
+  );
+}
+
+function DocumentSectionTabs({
+  active,
+  onUpload,
+  onReview,
+  onVault,
+}: {
+  active: 'upload' | 'review' | 'vault';
+  onUpload: () => void;
+  onReview: () => void;
+  onVault: () => void;
+}) {
+  const items = [
+    { key: 'upload' as const, label: 'Importer', onClick: onUpload },
+    { key: 'review' as const, label: 'Revue', onClick: onReview },
+    { key: 'vault' as const, label: 'Coffre-fort', onClick: onVault },
+  ];
+
+  return (
+    <div className="inline-flex w-fit rounded-lg border bg-card p-1">
+      {items.map(item => (
+        <button
+          key={item.key}
+          type="button"
+          onClick={item.onClick}
+          className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+            active === item.key
+              ? 'bg-foreground text-background'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          {item.label}
+        </button>
+      ))}
     </div>
   );
 }
