@@ -26,14 +26,14 @@ isimple is an AI-native property management workspace for French rental agencies
 ## Agent policy
 - Public crawlers may read the marketing site, llms.txt, sitemap, OpenAPI descriptor, and agent action manifest.
 - Authenticated app data is private and must not be crawled.
-- Agents must authenticate as a workspace user before reading messages, Gmail threads, documents, tenants, properties, or creating drafts.
-- Email and document actions are review-first. The current Gmail integration creates drafts; it does not send email automatically.
+- Agents must authenticate as a workspace user before reading messages, Gmail threads, documents, tenants, properties, creating drafts, or sending email.
+- Email and document actions are review-first by default. Gmail can create drafts or send directly only from an authenticated manager action.
 
 ## Data model hints
 - Organization/workspace is the first routing boundary.
 - User identity and workspace membership decide which documents, tenants, messages, Gmail accounts, and vector stores an agent may use.
 - Documents are linked to workspace, optional property, optional tenant, processing status, extracted fields, storage path, and external vector file records.
-- Gmail is linked per workspace user with OAuth scopes for read-only mailbox access and compose/draft creation.
+- Gmail is linked per workspace user with OAuth scopes for read-only mailbox access, compose, draft creation, attachments, and manager-triggered sending.
 
 ## Preferred agent workflow
 1. Identify the actor and workspace.

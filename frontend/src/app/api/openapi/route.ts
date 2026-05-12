@@ -33,8 +33,28 @@ export function GET() {
               from_email: { type: 'string' },
               from_name: { type: 'string' },
               snippet: { type: 'string' },
+              body_text: { type: 'string' },
               received_at: { type: 'string', format: 'date-time' },
               labels: { type: 'array', items: { type: 'string' } },
+              unread: { type: 'boolean' },
+              messages: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    message_id: { type: 'string' },
+                    direction: { type: 'string', enum: ['incoming', 'outgoing'] },
+                    from_email: { type: 'string' },
+                    from_name: { type: 'string' },
+                    to_emails: { type: 'array', items: { type: 'string' } },
+                    subject: { type: 'string' },
+                    body_text: { type: 'string' },
+                    received_at: { type: 'string', format: 'date-time' },
+                    unread: { type: 'boolean' },
+                  },
+                },
+              },
             },
           },
           DocumentUploadResponse: {
@@ -144,7 +164,7 @@ export function GET() {
         },
         '/api/gmail/drafts': {
           post: {
-            summary: 'Create a reviewed Gmail draft. This endpoint does not send email.',
+            summary: 'Create a reviewed Gmail draft, optionally with attachments.',
             requestBody: {
               required: true,
               content: {
@@ -162,9 +182,50 @@ export function GET() {
                     },
                   },
                 },
+                'multipart/form-data': {
+                  schema: {
+                    type: 'object',
+                    required: ['workspace_id', 'connection_id', 'to', 'subject', 'body'],
+                    properties: {
+                      workspace_id: { type: 'string', format: 'uuid' },
+                      connection_id: { type: 'string', format: 'uuid' },
+                      to: { type: 'string' },
+                      subject: { type: 'string' },
+                      body: { type: 'string' },
+                      thread_id: { type: 'string' },
+                      attachments: { type: 'array', items: { type: 'string', format: 'binary' } },
+                    },
+                  },
+                },
               },
             },
             responses: { '200': { description: 'Draft created in Gmail' } },
+          },
+        },
+        '/api/gmail/send': {
+          post: {
+            summary: 'Send a Gmail message from an authenticated manager action.',
+            requestBody: {
+              required: true,
+              content: {
+                'multipart/form-data': {
+                  schema: {
+                    type: 'object',
+                    required: ['workspace_id', 'connection_id', 'to', 'subject', 'body'],
+                    properties: {
+                      workspace_id: { type: 'string', format: 'uuid' },
+                      connection_id: { type: 'string', format: 'uuid' },
+                      to: { type: 'string' },
+                      subject: { type: 'string' },
+                      body: { type: 'string' },
+                      thread_id: { type: 'string' },
+                      attachments: { type: 'array', items: { type: 'string', format: 'binary' } },
+                    },
+                  },
+                },
+              },
+            },
+            responses: { '200': { description: 'Message sent through Gmail' } },
           },
         },
       },

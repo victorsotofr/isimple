@@ -34,10 +34,10 @@ export async function GET(request: NextRequest) {
 
     const normalized = await Promise.all(threadRefs.map(async (thread) => {
       const details = await gmailRequest<Parameters<typeof normalizeGmailThread>[0]>(
-        `threads/${thread.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`,
+        `threads/${thread.id}?format=full`,
         accessToken
       );
-      return normalizeGmailThread(details, workspaceId, connection.id);
+      return normalizeGmailThread(details, workspaceId, connection.id, connection.email);
     }));
 
     if (normalized.length > 0) {
@@ -45,7 +45,19 @@ export async function GET(request: NextRequest) {
         .from('gmail_threads_cache')
         .upsert(
           normalized.map((thread) => ({
-            ...thread,
+            workspace_id: thread.workspace_id,
+            gmail_connection_id: thread.gmail_connection_id,
+            thread_id: thread.thread_id,
+            message_id: thread.message_id,
+            from_email: thread.from_email,
+            from_name: thread.from_name,
+            to_emails: thread.to_emails,
+            subject: thread.subject,
+            snippet: thread.snippet,
+            received_at: thread.received_at,
+            labels: thread.labels,
+            unread: thread.unread,
+            raw: thread.raw,
             updated_at: new Date().toISOString(),
           })),
           { onConflict: 'gmail_connection_id,thread_id' }
@@ -71,9 +83,11 @@ export async function GET(request: NextRequest) {
         to_emails: thread.to_emails,
         subject: thread.subject,
         snippet: thread.snippet,
+        body_text: thread.body_text,
         received_at: thread.received_at,
         labels: thread.labels,
         unread: thread.unread,
+        messages: thread.messages,
       })),
     });
   } catch (e) {

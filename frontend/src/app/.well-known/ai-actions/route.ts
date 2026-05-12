@@ -17,7 +17,7 @@ export function GET() {
         notes: [
           'Authenticated app endpoints require a signed-in workspace user.',
           'Workspace membership is the authorization boundary for tenant, property, document, and message data.',
-          'Gmail access is per connected Google account and scoped to read mailbox data and create drafts.',
+          'Gmail access is per connected Google account and scoped to read mailbox data, create drafts, and send only after manager validation.',
         ],
       },
       current_capabilities: [
@@ -35,9 +35,9 @@ export function GET() {
         },
         {
           id: 'gmail_mailbox',
-          name: 'Read Gmail threads and create Gmail drafts',
+          name: 'Read Gmail threads, create drafts, and send reviewed replies',
           human_review_required: true,
-          actions: ['connect_gmail', 'search_gmail_threads', 'create_gmail_draft'],
+          actions: ['connect_gmail', 'search_gmail_threads', 'generate_reply_draft', 'attach_files', 'create_gmail_draft', 'send_gmail_reply'],
         },
       ],
       safety_constraints: [

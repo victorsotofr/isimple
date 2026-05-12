@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createGmailDraft, ensureValidGmailAccessToken } from '@/lib/gmail';
-import { getOwnedGmailConnection, gmailError, requireGmailRouteContext, requireWorkspaceMember } from '@/app/api/gmail/_utils';
+import { ensureValidGmailAccessToken, sendGmailMessage } from '@/lib/gmail';
 import { readGmailComposeRequest } from '@/app/api/gmail/_compose';
+import { getOwnedGmailConnection, gmailError, requireGmailRouteContext, requireWorkspaceMember } from '@/app/api/gmail/_utils';
 
 export async function POST(request: NextRequest) {
   const context = await requireGmailRouteContext();
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const accessToken = await ensureValidGmailAccessToken(context.supabase, connection);
-    const draft = await createGmailDraft({
+    const message = await sendGmailMessage({
       accessToken,
       to: body.to,
       subject: body.subject,
@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
       attachments: body.attachments,
     });
 
-    return NextResponse.json({ draft_id: draft.id, message: draft.message });
+    return NextResponse.json({ message_id: message.id, thread_id: message.threadId });
   } catch (e) {
-    console.error('[Gmail draft]', e);
-    return gmailError(e instanceof Error ? e.message : 'Création du brouillon Gmail impossible', 500);
+    console.error('[Gmail send]', e);
+    return gmailError(e instanceof Error ? e.message : 'Envoi Gmail impossible', 500);
   }
 }
