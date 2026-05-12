@@ -46,6 +46,8 @@ type GmailThreadSummary = {
   message_id: string | null;
   from_email: string | null;
   from_name: string | null;
+  reply_to_email: string | null;
+  reply_to_name: string | null;
   to_emails: string[];
   subject: string | null;
   snippet: string | null;
@@ -281,10 +283,6 @@ export function InboxView() {
     return `Cordialement,\n\n${activeWorkspace?.name ?? 'Votre agence'}`;
   }
 
-  function emptyGmailReply() {
-    return `Bonjour,\n\n\n\n${gmailSignature()}`;
-  }
-
   function withGmailSignature(value: string) {
     const draft = value.replace(/\[Votre Nom\]/gi, activeWorkspace?.name ?? 'Votre agence').trim();
     if (/cordialement|bien à vous|bonne journée/i.test(draft)) return draft;
@@ -305,7 +303,7 @@ export function InboxView() {
     setSelectedGmailThread(readThread);
     setGmailThreads(prev => prev.map(item => item.thread_id === thread.thread_id ? readThread : item));
     setGmailDraftStatus('');
-    setGmailDraft(emptyGmailReply());
+    setGmailDraft('');
     setGmailAttachments([]);
   }
 
@@ -332,15 +330,34 @@ export function InboxView() {
       : `Re: ${selectedGmailThread.subject || '(Sans objet)'}`;
   }
 
+  function gmailReplyTarget(thread = selectedGmailThread) {
+    if (!thread) return null;
+    const accountEmail = gmailConnections[0]?.email?.toLowerCase();
+    const latestIncoming = [...(thread.messages ?? [])]
+      .reverse()
+      .find(message =>
+        message.direction === 'incoming'
+        && message.from_email
+        && (!accountEmail || message.from_email.toLowerCase() !== accountEmail)
+      );
+    const fallbackEmail = thread.reply_to_email || thread.from_email;
+    if (!fallbackEmail || (accountEmail && fallbackEmail.toLowerCase() === accountEmail)) return null;
+    return {
+      email: latestIncoming?.from_email ?? fallbackEmail,
+      name: latestIncoming?.from_name || thread.reply_to_name || thread.from_name || fallbackEmail,
+    };
+  }
+
   function buildGmailComposerData() {
-    if (!activeWorkspace || !selectedGmailThread || !gmailConnections[0] || !selectedGmailThread.from_email) {
+    const target = gmailReplyTarget();
+    if (!activeWorkspace || !selectedGmailThread || !gmailConnections[0] || !target?.email) {
       return null;
     }
 
     const form = new FormData();
     form.append('workspace_id', activeWorkspace.id);
     form.append('connection_id', gmailConnections[0].id);
-    form.append('to', selectedGmailThread.from_email);
+    form.append('to', target.email);
     form.append('subject', gmailReplySubject());
     form.append('body', gmailDraft.trim());
     form.append('thread_id', selectedGmailThread.thread_id);
@@ -350,16 +367,20 @@ export function InboxView() {
 
   async function handleGmailAiDraft() {
     if (!activeWorkspace || !selectedGmailThread) return;
+    const target = gmailReplyTarget();
+    if (!target?.email) {
+      setGmailDraftStatus('Destinataire Gmail introuvable.');
+      return;
+    }
     setGmailAiDrafting(true);
     setGmailDraftStatus('');
 
     const context = [
       'Canal: Gmail',
-      `De: ${selectedGmailSender}`,
-      `Email expéditeur: ${selectedGmailThread.from_email ?? 'inconnu'}`,
+      `Répondre à: ${target.name} <${target.email}>`,
       `Sujet: ${selectedGmailThread.subject || '(Sans objet)'}`,
       '',
-      'Message reçu:',
+      'Thread Gmail:',
       selectedGmailBody,
     ].join('\n');
 
@@ -369,10 +390,10 @@ export function InboxView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: activeWorkspace.id,
-          sender_email: selectedGmailThread.from_email,
+          sender_email: target.email,
           subject: gmailReplySubject(),
           context,
-          recipient_name: selectedGmailSender,
+          recipient_name: target.name,
           tone: 'formal',
         }),
       });
@@ -401,8 +422,9 @@ export function InboxView() {
 
   async function handleSubmitGmailMessage(action: 'draft' | 'send') {
     if (!activeWorkspace || !selectedGmailThread || !gmailConnections[0]) return;
-    if (!selectedGmailThread.from_email) {
-      setGmailDraftStatus('Adresse expéditeur introuvable.');
+    const target = gmailReplyTarget();
+    if (!target?.email) {
+      setGmailDraftStatus('Destinataire Gmail introuvable.');
       return;
     }
     if (!gmailDraft.trim()) {
@@ -426,7 +448,7 @@ export function InboxView() {
       if (!res.ok) throw new Error(data.error ?? (action === 'draft' ? 'Brouillon Gmail impossible' : 'Envoi Gmail impossible'));
       setGmailDraftStatus(action === 'draft' ? 'Brouillon créé dans Gmail.' : 'Email envoyé depuis Gmail.');
       if (action === 'send') {
-        setGmailDraft(emptyGmailReply());
+        setGmailDraft('');
         setGmailAttachments([]);
         const refreshed = await loadGmailThreads(gmailConnections[0].id);
         const refreshedThread = refreshed?.find(thread => thread.thread_id === selectedGmailThread.thread_id);
@@ -587,7 +609,7 @@ export function InboxView() {
     { id: 'whatsapp', label: 'WhatsApp', count: 0, disabled: true },
   ];
   const selectedGmailSender = selectedGmailThread
-    ? selectedGmailThread.from_name || selectedGmailThread.from_email || 'Expéditeur Gmail'
+    ? selectedGmailThread.reply_to_name || selectedGmailThread.from_name || selectedGmailThread.reply_to_email || selectedGmailThread.from_email || 'Expéditeur Gmail'
     : '';
   const selectedGmailMessages = selectedGmailThread?.messages?.length
     ? selectedGmailThread.messages
@@ -606,7 +628,12 @@ export function InboxView() {
       direction: 'incoming' as const,
     }] : [];
   const selectedGmailBody = selectedGmailMessages
-    .map(message => `${message.direction === 'outgoing' ? 'Gestionnaire' : selectedGmailSender}: ${message.body_text || message.snippet || ''}`)
+    .map(message => {
+      const author = message.direction === 'outgoing'
+        ? 'Gestionnaire'
+        : message.from_name || message.from_email || selectedGmailSender;
+      return `${author}: ${message.body_text || message.snippet || ''}`;
+    })
     .join('\n\n');
 
   return (
@@ -721,7 +748,7 @@ export function InboxView() {
                   </div>
                   {gmailThreads.map(thread => {
                     const active = selectedGmailThread?.thread_id === thread.thread_id;
-                    const sender = thread.from_name || thread.from_email || 'Expéditeur Gmail';
+                    const sender = thread.reply_to_name || thread.from_name || thread.reply_to_email || thread.from_email || 'Expéditeur Gmail';
                     return (
                       <button
                         key={thread.thread_id}

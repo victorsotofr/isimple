@@ -80,6 +80,8 @@ export async function GET(request: NextRequest) {
         message_id: thread.message_id,
         from_email: thread.from_email,
         from_name: thread.from_name,
+        reply_to_email: thread.reply_to_email,
+        reply_to_name: thread.reply_to_name,
         to_emails: thread.to_emails,
         subject: thread.subject,
         snippet: thread.snippet,

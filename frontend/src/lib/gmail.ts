@@ -337,6 +337,8 @@ export function normalizeGmailThread(
     message_id: latest?.message_id ?? null,
     from_email: participant?.from_email ?? null,
     from_name: participant?.from_name ?? null,
+    reply_to_email: latestIncoming?.from_email ?? participant?.from_email ?? null,
+    reply_to_name: latestIncoming?.from_name ?? participant?.from_name ?? null,
     to_emails: latest?.to_emails ?? [],
     subject: displaySubject,
     snippet: decodeHtmlEntities(snippet),
