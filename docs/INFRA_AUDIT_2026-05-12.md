@@ -8,6 +8,7 @@
 - Default retrieval scope is one vector store per workspace/agency.
 - Tenant and lot scoping happens by deterministic identity resolution plus document-ID filtering inside the workspace vector store.
 - OpenAI vector-store file sync is required for a document to reach `processing_status = indexed`.
+- The agent can use separate OpenAI projects: `OPENAI_API_KEY` for model calls, and `OPENAI_VECTOR_STORE_API_KEY` for vector-store sync/search.
 
 ## Current Runtime Flow
 
@@ -55,3 +56,9 @@ Do not create one vector store per tenant for the MVP because it duplicates shar
 - OpenAI Vector Stores: primary RAG index.
 - Supabase: source of truth, permissions, relational filtering, audit, storage.
 - Pinecone: keep as a future provider behind `workspace_vector_stores` only if OpenAI Vector Stores become limiting on latency, filter expressiveness, portability, or cost.
+
+## OpenAI Keys
+
+- `OPENAI_API_KEY`: model inference through LangChain/OpenAI.
+- `OPENAI_VECTOR_STORE_API_KEY`: OpenAI Vector Store create/upload/search/delete calls.
+- If `OPENAI_VECTOR_STORE_API_KEY` is unset, the backend falls back to `OPENAI_API_KEY` for simple single-project setups.

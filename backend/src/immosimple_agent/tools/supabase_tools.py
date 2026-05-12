@@ -317,7 +317,11 @@ def _index_document_sync(workspace_id: str, document_id: str, force: bool = Fals
         document_id=document_id,
         stage="indexed",
         status="running",
-        provider="openai" if os.environ.get("OPENAI_API_KEY") else None,
+        provider=(
+            "openai"
+            if os.environ.get("OPENAI_VECTOR_STORE_API_KEY") or os.environ.get("OPENAI_API_KEY")
+            else None
+        ),
         input_data={"force": force},
     )
 

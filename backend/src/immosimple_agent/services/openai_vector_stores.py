@@ -26,9 +26,10 @@ def openai_vector_stores_enabled() -> bool:
 
 
 def _client() -> OpenAI | None:
-    if not os.environ.get("OPENAI_API_KEY"):
+    api_key = os.environ.get("OPENAI_VECTOR_STORE_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
         return None
-    return OpenAI()
+    return OpenAI(api_key=api_key)
 
 
 def _safe_file_name(value: str) -> str:

@@ -27,6 +27,8 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4.1-mini
+      - key: OPENAI_VECTOR_STORE_API_KEY
+        sync: false
       - key: OPENAI_VECTOR_STORES_ENABLED
         value: "true"
       - key: LANGSMITH_TRACING

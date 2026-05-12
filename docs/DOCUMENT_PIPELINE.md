@@ -80,6 +80,10 @@ for workspace membership, identity resolution, document metadata, review status,
 provider registry. Use one OpenAI Vector Store per workspace/agency by default. Do not create one store per
 tenant by default; resolve the tenant first, then filter the workspace vector store by allowed document IDs.
 
+The backend supports separate OpenAI projects: `OPENAI_API_KEY` is used for model calls, while
+`OPENAI_VECTOR_STORE_API_KEY` is used for OpenAI Vector Store sync/search. If the vector-store key is not
+set, the backend falls back to `OPENAI_API_KEY`.
+
 Create tenant- or lot-scoped stores only for exceptional large customers with materially different data
 isolation, deletion, or performance requirements. Pinecone should remain behind the provider registry until
 we have evidence that OpenAI Vector Store latency, filter expressiveness, portability, or cost is the bottleneck.
