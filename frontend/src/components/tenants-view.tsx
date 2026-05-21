@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Users, Sparkles, Pencil, Trash2, FileText, Upload } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -19,6 +19,15 @@ import { useLanguage } from '@/contexts/language-context';
 import { createClient } from '@/lib/supabase-browser';
 import type { Tenant, Lot } from '@/db';
 
+const optionalPositiveNumber = z.preprocess(
+  value => value === '' || value == null ? undefined : value,
+  z.coerce.number().positive('Le montant doit être positif.').optional()
+);
+const optionalNonNegativeNumber = z.preprocess(
+  value => value === '' || value == null ? undefined : value,
+  z.coerce.number().min(0, 'Le montant ne peut pas être négatif.').optional()
+);
+
 const tenantSchema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
@@ -27,9 +36,32 @@ const tenantSchema = z.object({
   with_lease: z.boolean().default(false),
   lot_id: z.string().optional(),
   start_date: z.string().optional(),
-  rent_amount: z.coerce.number().positive().optional(),
-  charges_amount: z.coerce.number().min(0).default(0).optional(),
-  deposit_amount: z.coerce.number().min(0).default(0).optional(),
+  rent_amount: optionalPositiveNumber,
+  charges_amount: optionalNonNegativeNumber,
+  deposit_amount: optionalNonNegativeNumber,
+}).superRefine((values, ctx) => {
+  if (!values.with_lease) return;
+  if (!values.lot_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['lot_id'],
+      message: 'Sélectionnez un bien.',
+    });
+  }
+  if (!values.start_date) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['start_date'],
+      message: 'Indiquez la date de début.',
+    });
+  }
+  if (values.rent_amount == null) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['rent_amount'],
+      message: 'Renseignez le loyer.',
+    });
+  }
 });
 type TenantForm = z.infer<typeof tenantSchema>;
 type TenantWithLot = Tenant & {
@@ -46,6 +78,7 @@ export function TenantsView() {
   const supabase = createClient();
   const searchParams = useSearchParams();
   const editParam = searchParams.get('edit');
+  const consumedEditRef = useRef<string | null>(null);
 
   const [tenants, setTenants] = useState<TenantWithLot[]>([]);
   const [lots, setLots] = useState<Lot[]>([]);
@@ -59,10 +92,18 @@ export function TenantsView() {
 
   const form = useForm<TenantForm>({
     resolver: zodResolver(tenantSchema),
-    defaultValues: { with_lease: false, charges_amount: 0, deposit_amount: 0 },
+    defaultValues: {
+      with_lease: false,
+      lot_id: '',
+      start_date: '',
+      charges_amount: 0,
+      deposit_amount: 0,
+    },
   });
   const withLease = form.watch('with_lease');
   const selectedLotId = form.watch('lot_id');
+  const editingTenant = editing ? tenants.find(tenant => tenant.id === editing.id) ?? null : null;
+  const canAttachLease = !editing || !editingTenant?.lot || editingTenant.lotFromDocument;
 
   useEffect(() => {
     if (!activeWorkspace) return;
@@ -136,12 +177,38 @@ export function TenantsView() {
     setOpen(true);
   };
 
+  const clearEditParam = () => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('edit')) return;
+    params.delete('edit');
+    const nextQuery = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`);
+  };
+
   useEffect(() => {
-    if (!editParam || tenants.length === 0) return;
+    if (!editParam) {
+      consumedEditRef.current = null;
+      return;
+    }
+    if (loading || consumedEditRef.current === editParam) return;
     const target = tenants.find(tt => tt.id === editParam);
+    consumedEditRef.current = editParam;
     if (target) openEdit(target);
+    clearEditParam();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editParam, tenants.length]);
+  }, [editParam, loading, tenants.length]);
+
+  const handleWithLeaseChange = (checked: boolean) => {
+    form.setValue('with_lease', checked, { shouldValidate: true });
+    if (!checked) {
+      form.setValue('lot_id', '');
+      form.setValue('start_date', '');
+      form.setValue('rent_amount', undefined);
+      form.setValue('charges_amount', 0);
+      form.setValue('deposit_amount', 0);
+      form.clearErrors(['lot_id', 'start_date', 'rent_amount', 'charges_amount', 'deposit_amount']);
+    }
+  };
 
   const handleAIFill = (data: Record<string, unknown>) => {
     if (data.first_name) form.setValue('first_name', data.first_name as string);
@@ -167,8 +234,25 @@ export function TenantsView() {
         .eq('id', editing.id)
         .select()
         .single();
+      let linkedLot = editingTenant?.lot ?? null;
+      let linkedFromDocument = editingTenant?.lotFromDocument ?? false;
+      if (updated && values.with_lease && values.lot_id && values.start_date && values.rent_amount != null) {
+        await supabase.from('leases').insert({
+          workspace_id: activeWorkspace.id,
+          lot_id: values.lot_id,
+          tenant_id: editing.id,
+          start_date: values.start_date,
+          rent_amount: values.rent_amount ?? 0,
+          charges_amount: values.charges_amount ?? 0,
+          deposit_amount: values.deposit_amount ?? 0,
+        });
+        linkedLot = lots.find(l => l.id === values.lot_id) ?? null;
+        linkedFromDocument = false;
+      }
       if (updated) {
-        setTenants(prev => prev.map(x => x.id === editing.id ? { ...x, ...(updated as Tenant) } : x));
+        setTenants(prev => prev.map(x => x.id === editing.id
+          ? { ...x, ...(updated as Tenant), lot: linkedLot, lotFromDocument: linkedFromDocument }
+          : x));
       }
       setSaving(false);
       setOpen(false);
@@ -190,7 +274,7 @@ export function TenantsView() {
       .select()
       .single();
 
-    if (tenant && values.with_lease && values.lot_id && values.start_date) {
+    if (tenant && values.with_lease && values.lot_id && values.start_date && values.rent_amount != null) {
       await supabase.from('leases').insert({
         workspace_id: activeWorkspace.id,
         lot_id: values.lot_id,
@@ -203,7 +287,7 @@ export function TenantsView() {
     }
 
     if (tenant) {
-      const lot = values.lot_id ? lots.find(l => l.id === values.lot_id) ?? null : null;
+      const lot = values.with_lease && values.lot_id ? lots.find(l => l.id === values.lot_id) ?? null : null;
       setTenants(prev => [{ ...(tenant as Tenant), lot }, ...prev]);
     }
     setSaving(false);
@@ -395,18 +479,18 @@ export function TenantsView() {
               <Input placeholder="06 12 34 56 78" {...form.register('phone')} />
             </div>
 
-            {!editing && (
+            {canAttachLease && (
               <div className="flex items-center gap-2 pt-2">
                 <Checkbox
                   id="with_lease"
                   checked={withLease}
-                  onCheckedChange={(v: boolean | 'indeterminate') => form.setValue('with_lease', v === true)}
+                  onCheckedChange={(v: boolean | 'indeterminate') => handleWithLeaseChange(v === true)}
                 />
                 <Label htmlFor="with_lease" className="cursor-pointer">{t.tenants.withLease}</Label>
               </div>
             )}
 
-            {!editing && withLease && (
+            {canAttachLease && withLease && (
               <div className="space-y-3 pt-1 pl-6 border-l-2 border-muted">
                 <div className="space-y-2">
                   <Label>{t.tenants.property}</Label>
@@ -419,23 +503,38 @@ export function TenantsView() {
                       <option key={l.id} value={l.id}>{l.address}, {l.city}</option>
                     ))}
                   </select>
+                  {form.formState.errors.lot_id && (
+                    <p className="text-xs text-destructive">{form.formState.errors.lot_id.message}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>{t.tenants.startDate}</Label>
                   <Input type="date" {...form.register('start_date')} />
+                  {form.formState.errors.start_date && (
+                    <p className="text-xs text-destructive">{form.formState.errors.start_date.message}</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-2">
                     <Label>{t.tenants.rentAmount}</Label>
                     <Input type="number" step="0.01" {...form.register('rent_amount')} />
+                    {form.formState.errors.rent_amount && (
+                      <p className="text-xs text-destructive">{form.formState.errors.rent_amount.message}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{t.tenants.chargesAmount}</Label>
                     <Input type="number" step="0.01" {...form.register('charges_amount')} />
+                    {form.formState.errors.charges_amount && (
+                      <p className="text-xs text-destructive">{form.formState.errors.charges_amount.message}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{t.tenants.depositAmount}</Label>
                     <Input type="number" step="0.01" {...form.register('deposit_amount')} />
+                    {form.formState.errors.deposit_amount && (
+                      <p className="text-xs text-destructive">{form.formState.errors.deposit_amount.message}</p>
+                    )}
                   </div>
                 </div>
               </div>

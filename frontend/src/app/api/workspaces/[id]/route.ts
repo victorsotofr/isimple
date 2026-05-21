@@ -49,6 +49,33 @@ async function requireAdmin(workspaceId: string) {
   return { user, admin };
 }
 
+async function recordAudit(
+  admin: ReturnType<typeof getServiceSupabase>,
+  event: {
+    workspaceId: string;
+    actorUserId: string;
+    eventType: string;
+    entityType: string;
+    entityId?: string | null;
+    summary: string;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  const { error } = await admin.from('audit_events').insert({
+    workspace_id: event.workspaceId,
+    actor_user_id: event.actorUserId,
+    event_type: event.eventType,
+    entity_type: event.entityType,
+    entity_id: event.entityId ?? null,
+    summary: event.summary,
+    metadata: event.metadata ?? {},
+  });
+
+  if (error) {
+    console.warn('[audit_events] write skipped', error.message);
+  }
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -83,6 +110,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 500 });
     }
 
+    await recordAudit(auth.admin, {
+      workspaceId: id,
+      actorUserId: auth.user.id,
+      eventType: 'workspace_updated',
+      entityType: 'workspace',
+      entityId: id,
+      summary: `Workspace mis à jour : ${workspace.name}`,
+      metadata: { fields: Object.keys(update) },
+    });
+
     return NextResponse.json({ workspace });
   } catch (e) {
     console.error('[PATCH /api/workspaces/:id]', e);
@@ -111,6 +148,15 @@ export async function DELETE(
         { status: 400 }
       );
     }
+
+    await recordAudit(auth.admin, {
+      workspaceId: id,
+      actorUserId: auth.user.id,
+      eventType: 'workspace_delete_requested',
+      entityType: 'workspace',
+      entityId: id,
+      summary: 'Suppression du workspace demandée',
+    });
 
     // Delete workspace (cascade deletes members, lots, tenants, leases, etc.)
     const { error } = await auth.admin.from('workspaces').delete().eq('id', id);

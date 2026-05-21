@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/db';
-import { requireUser, withWorkspaceAISettings } from '../_utils';
-
-const AGENT_URL = process.env.AGENT_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? 'http://localhost:8000';
+import {
+  AGENT_URL,
+  agentJsonHeaders,
+  isPlainObject,
+  requireUser,
+  requireWorkspaceMembership,
+  withWorkspaceAISettings,
+} from '../_utils';
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
@@ -24,11 +29,19 @@ export async function POST(request: NextRequest) {
   if ('response' in auth) return auth.response;
 
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!isPlainObject(body)) {
+      return NextResponse.json({ error: 'JSON invalide' }, { status: 400 });
+    }
+
+    const workspaceId = typeof body.workspace_id === 'string' ? body.workspace_id : null;
+    const membership = await requireWorkspaceMembership(supabase, auth.user.id, workspaceId);
+    if ('response' in membership) return membership.response;
+
     const payload = await withWorkspaceAISettings(supabase, body);
     const response = await fetch(`${AGENT_URL}/api/classify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: agentJsonHeaders(),
       body: JSON.stringify(payload),
     });
     const data = await response.json();

@@ -1,4 +1,4 @@
-// Types Supabase — générés manuellement pour Phase 1–4 (migrations 0001–0008)
+// Types Supabase — générés manuellement pour Phase 1–4 (migrations 0001–0018)
 // À régénérer via scripts/gen-db-types.sh après chaque migration
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -15,6 +15,14 @@ export type VectorStoreScope = 'workspace' | 'tenant' | 'lot';
 export type VectorStoreStatus = 'pending' | 'ready' | 'syncing' | 'failed' | 'deleted';
 export type DocumentExternalFileStatus = 'queued' | 'uploading' | 'indexed' | 'failed' | 'deleted';
 export type GmailConnectionStatus = 'connected' | 'revoked' | 'error';
+export type TicketStatus = 'open' | 'in_progress' | 'waiting_provider' | 'resolved' | 'closed';
+export type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type TicketSource = 'manual' | 'inbox' | 'gmail' | 'document' | 'system';
+export type TicketResponsibility = 'tenant' | 'landlord' | 'provider' | 'unknown';
+export type TicketEventType = 'created' | 'status_changed' | 'priority_changed' | 'provider_changed' | 'due_date_changed' | 'assignment_changed' | 'ai_suggestion' | 'note';
+export type ComplianceItemStatus = 'missing' | 'pending_review' | 'complete' | 'waived';
+export type NotificationStatus = 'unread' | 'read' | 'dismissed';
+export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
 export interface Database {
   public: {
@@ -205,6 +213,270 @@ export interface Database {
           charges_amount?: number;
           deposit_amount?: number;
           status?: 'active' | 'ended' | 'pending';
+          created_at?: string;
+        };
+      };
+      providers: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          specialty: string;
+          company: string | null;
+          email: string | null;
+          phone: string | null;
+          address: string | null;
+          notes: string | null;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          specialty?: string;
+          company?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          notes?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          name?: string;
+          specialty?: string;
+          company?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          address?: string | null;
+          notes?: string | null;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      tickets: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          lot_id: string | null;
+          tenant_id: string | null;
+          provider_id: string | null;
+          title: string;
+          description: string | null;
+          status: TicketStatus;
+          priority: TicketPriority;
+          due_at: string | null;
+          source: TicketSource;
+          source_ref: string | null;
+          ai_summary: string | null;
+          responsibility: TicketResponsibility | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          lot_id?: string | null;
+          tenant_id?: string | null;
+          provider_id?: string | null;
+          title: string;
+          description?: string | null;
+          status?: TicketStatus;
+          priority?: TicketPriority;
+          due_at?: string | null;
+          source?: TicketSource;
+          source_ref?: string | null;
+          ai_summary?: string | null;
+          responsibility?: TicketResponsibility | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          lot_id?: string | null;
+          tenant_id?: string | null;
+          provider_id?: string | null;
+          title?: string;
+          description?: string | null;
+          status?: TicketStatus;
+          priority?: TicketPriority;
+          due_at?: string | null;
+          source?: TicketSource;
+          source_ref?: string | null;
+          ai_summary?: string | null;
+          responsibility?: TicketResponsibility | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      ticket_events: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          ticket_id: string;
+          event_type: TicketEventType;
+          title: string;
+          body: string | null;
+          metadata: Json;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          ticket_id: string;
+          event_type?: TicketEventType;
+          title: string;
+          body?: string | null;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          ticket_id?: string;
+          event_type?: TicketEventType;
+          title?: string;
+          body?: string | null;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+        };
+      };
+      compliance_items: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          lot_id: string | null;
+          lease_id: string | null;
+          document_id: string | null;
+          item_type: string;
+          label: string;
+          status: ComplianceItemStatus;
+          due_at: string | null;
+          notes: string | null;
+          metadata: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          lot_id?: string | null;
+          lease_id?: string | null;
+          document_id?: string | null;
+          item_type: string;
+          label: string;
+          status?: ComplianceItemStatus;
+          due_at?: string | null;
+          notes?: string | null;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          lot_id?: string | null;
+          lease_id?: string | null;
+          document_id?: string | null;
+          item_type?: string;
+          label?: string;
+          status?: ComplianceItemStatus;
+          due_at?: string | null;
+          notes?: string | null;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      notifications: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          user_id: string | null;
+          title: string;
+          body: string | null;
+          status: NotificationStatus;
+          priority: NotificationPriority;
+          action_href: string | null;
+          metadata: Json;
+          created_at: string;
+          read_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          user_id?: string | null;
+          title: string;
+          body?: string | null;
+          status?: NotificationStatus;
+          priority?: NotificationPriority;
+          action_href?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          read_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          user_id?: string | null;
+          title?: string;
+          body?: string | null;
+          status?: NotificationStatus;
+          priority?: NotificationPriority;
+          action_href?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          read_at?: string | null;
+        };
+      };
+      audit_events: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          actor_user_id: string | null;
+          event_type: string;
+          entity_type: string;
+          entity_id: string | null;
+          summary: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          actor_user_id?: string | null;
+          event_type: string;
+          entity_type: string;
+          entity_id?: string | null;
+          summary: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          actor_user_id?: string | null;
+          event_type?: string;
+          entity_type?: string;
+          entity_id?: string | null;
+          summary?: string;
+          metadata?: Json;
           created_at?: string;
         };
       };
@@ -666,6 +938,12 @@ export type WorkspaceInvitation = Database['public']['Tables']['workspace_invita
 export type Lot = Database['public']['Tables']['lots']['Row'];
 export type Tenant = Database['public']['Tables']['tenants']['Row'];
 export type Lease = Database['public']['Tables']['leases']['Row'];
+export type Provider = Database['public']['Tables']['providers']['Row'];
+export type Ticket = Database['public']['Tables']['tickets']['Row'];
+export type TicketEvent = Database['public']['Tables']['ticket_events']['Row'];
+export type ComplianceItem = Database['public']['Tables']['compliance_items']['Row'];
+export type Notification = Database['public']['Tables']['notifications']['Row'];
+export type AuditEvent = Database['public']['Tables']['audit_events']['Row'];
 export type Conversation = Database['public']['Tables']['conversations']['Row'];
 export type Message = Database['public']['Tables']['messages']['Row'];
 

@@ -3,7 +3,7 @@ export const siteConfig = {
   legalName: 'isimple',
   defaultUrl: 'http://localhost:3000',
   description:
-    'Plateforme de gestion locative IA pour centraliser messages, documents, biens, locataires et actions de suivi.',
+    'Plateforme de gestion locative IA pour centraliser messages, documents, biens, locataires, tickets, prestataires et actions de suivi.',
   locale: 'fr_FR',
   keywords: [
     'gestion locative',
@@ -13,9 +13,24 @@ export const siteConfig = {
     'RAG immobilier',
     'agent immobilier IA',
     'inbox locataire',
+    'ticketing immobilier',
+    'prestataires maintenance',
+    'conformité locative',
   ],
   publicRoutes: ['/', '/login', '/signup'],
-  appRoutes: ['/inbox', '/documents', '/documents/upload', '/lots', '/tenants', '/tickets'],
+  appRoutes: [
+    '/inbox',
+    '/documents',
+    '/documents/upload',
+    '/lots',
+    '/tenants',
+    '/tickets',
+    '/prestataires',
+    '/agenda',
+    '/analytics',
+    '/settings',
+  ],
+  agentRoutes: ['/llms.txt', '/llms-full.txt', '/.well-known/ai-actions', '/.well-known/mcp', '/api/openapi'],
 } as const;
 
 export function getSiteUrl() {

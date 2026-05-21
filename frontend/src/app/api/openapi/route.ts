@@ -75,11 +75,71 @@ export function GET() {
             responses: { '200': { description: 'Plain-text agent guide' } },
           },
         },
+        '/llms-full.txt': {
+          get: {
+            summary: 'Extended agent-oriented product and policy brief',
+            security: [],
+            responses: { '200': { description: 'Plain-text extended agent guide' } },
+          },
+        },
         '/.well-known/ai-actions': {
           get: {
             summary: 'Agent capability manifest',
             security: [],
             responses: { '200': { description: 'Agent action metadata' } },
+          },
+        },
+        '/.well-known/mcp': {
+          get: {
+            summary: 'Public MCP discovery manifest',
+            security: [],
+            responses: { '200': { description: 'MCP discovery metadata with no private workspace data' } },
+          },
+        },
+        '/api/agent/classify': {
+          post: {
+            summary: 'Classify a workspace-scoped message or note for manager review',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['workspace_id', 'text'],
+                    properties: {
+                      workspace_id: { type: 'string', format: 'uuid' },
+                      text: { type: 'string' },
+                      subject: { type: 'string' },
+                      sender: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+            responses: { '200': { description: 'Classification and suggested action' } },
+          },
+        },
+        '/api/agent/draft': {
+          post: {
+            summary: 'Draft a manager-reviewed reply from workspace context',
+            requestBody: {
+              required: true,
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['workspace_id', 'message'],
+                    properties: {
+                      workspace_id: { type: 'string', format: 'uuid' },
+                      message: { type: 'string' },
+                      tone: { type: 'string' },
+                      context: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+            responses: { '200': { description: 'Draft reply proposal' } },
           },
         },
         '/api/documents/upload': {

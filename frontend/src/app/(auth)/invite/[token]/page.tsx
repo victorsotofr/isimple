@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase-browser';
+import { createClient, getAuthenticatedUser } from '@/lib/supabase-browser';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, Building2 } from 'lucide-react';
@@ -27,25 +27,18 @@ export default function InvitePage() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUserEmail(session.user.email ?? null);
+      const user = await getAuthenticatedUser(supabase);
+      if (user) {
+        setUserEmail(user.email ?? null);
       }
 
-      const { data, error: fetchError } = await supabase
-        .from('workspace_invitations')
-        .select('id, email, expires_at, status, workspaces(name)')
-        .eq('token', token)
-        .single();
+      const res = await fetch(`/api/invitations/${token}`);
+      const data = await res.json();
 
-      if (fetchError || !data) {
-        setError('Invitation introuvable');
-      } else if (data.status !== 'pending') {
-        setError(data.status === 'expired' ? 'Cette invitation a expiré' : 'Cette invitation a déjà été utilisée');
-      } else if (new Date(data.expires_at) < new Date()) {
-        setError('Cette invitation a expiré');
+      if (!res.ok) {
+        setError(data.error ?? 'Invitation introuvable');
       } else {
-        setInvitation(data as typeof invitation);
+        setInvitation(data.invitation as typeof invitation);
       }
 
       setLoading(false);

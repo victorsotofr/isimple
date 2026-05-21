@@ -9,7 +9,7 @@ import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { createClient } from '@/lib/supabase-browser';
+import { createClient, getAuthenticatedUser } from '@/lib/supabase-browser';
 
 const schema = z.object({
   first_name: z.string().min(1),
@@ -30,8 +30,7 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      const user = data.user;
+    getAuthenticatedUser(supabase).then(user => {
       if (!user) return;
       setEmail(user.email ?? '');
       form.setValue('first_name', user.user_metadata?.first_name ?? '');

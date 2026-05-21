@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Bot, CheckCircle2, ExternalLink, FileText, Mail, MessageCircle, MessageSquare, Paperclip, Plus, RefreshCw, Send, Sparkles, Upload, UserRound, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertCircle, Bot, CheckCircle2, ExternalLink, FileText, Mail, MessageCircle, MessageSquare, Paperclip, Plus, RefreshCw, Send, Sparkles, Upload, UserRound, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,6 +64,65 @@ type GmailThreadSummary = {
 type GmailSuggestedDocument = Pick<Document, 'id' | 'file_name' | 'doc_type' | 'status' | 'lot_id' | 'tenant_id' | 'created_at' | 'updated_at'>;
 
 type SourceFilter = 'all' | 'isimple' | 'gmail' | 'whatsapp';
+type TicketPriority = 'low' | 'normal' | 'high' | 'urgent';
+type TicketPrefillSource = 'inbox' | 'gmail';
+type TicketPrefill = {
+  title: string;
+  description: string;
+  priority?: TicketPriority;
+  due_at?: string | null;
+  tenant_id?: string | null;
+  source: TicketPrefillSource;
+  source_ref: string;
+  source_label: string;
+  source_subject?: string | null;
+  source_sender_name?: string | null;
+  source_sender_email?: string | null;
+  ai_summary?: string | null;
+  ai_category?: string | null;
+  ai_confidence?: number | null;
+  responsibility?: 'tenant' | 'landlord' | 'provider' | 'unknown' | null;
+  gmail_message_id?: string | null;
+  received_at?: string | null;
+};
+type AiClassificationPreview = {
+  category: string;
+  confidence: number;
+  summary: string;
+  tenant_id?: string | null;
+  identity_confidence?: number | null;
+  model?: string | null;
+  latency_ms?: number | null;
+};
+type AiDraftPreview = {
+  draft: string;
+  subject: string;
+  tenant_id?: string | null;
+  identity_confidence?: number | null;
+  model?: string | null;
+  latency_ms?: number | null;
+};
+type AiPreviewState = {
+  targetKey: string;
+  classification: AiClassificationPreview | null;
+  draft: AiDraftPreview | null;
+  classifying: boolean;
+  drafting: boolean;
+  error: string;
+};
+type AiTarget = {
+  key: string;
+  channel: 'Gmail' | 'Inbox';
+  subject: string;
+  message: string;
+  context: string;
+  tenantId: string | null;
+  conversationId?: string | null;
+  senderEmail?: string | null;
+  recipientName?: string | null;
+};
+
+const TICKET_PREFILL_STORAGE_PREFIX = 'isimple:ticket-prefill:';
 
 const CATEGORY_COLORS: Record<Conversation['category'], string> = {
   maintenance: 'bg-orange-100 text-orange-700 border-orange-200',
@@ -78,6 +138,17 @@ const STATUS_STYLES: Record<Conversation['status'], { label: string; dot: string
   pending: { label: 'En attente', dot: 'bg-brand' },
   closed: { label: 'Résolu', dot: 'bg-muted-foreground' },
 };
+
+function emptyAiPreview(targetKey = ''): AiPreviewState {
+  return {
+    targetKey,
+    classification: null,
+    draft: null,
+    classifying: false,
+    drafting: false,
+    error: '',
+  };
+}
 
 function fmtTime(iso: string) {
   const d = new Date(iso);
@@ -120,6 +191,41 @@ function agentErrorMessage(data: unknown): string {
   return 'Agent IA indisponible.';
 }
 
+function truncateText(value: string, max = 3000) {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+function confidenceLabel(value: number | null | undefined) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return null;
+  return `${Math.round(value * 100)}%`;
+}
+
+function suggestedPriority(category: string | null | undefined, message: string): TicketPriority {
+  const normalized = `${category ?? ''} ${message}`.toLowerCase();
+  if (/urgence|urgent|inondation|dégât des eaux|degat des eaux|incendie|gaz|électricité|electricite/.test(normalized)) {
+    return 'urgent';
+  }
+  if (/réclamation|reclamation|plainte|fuite|chauffage|panne|moisissure|serrure/.test(normalized)) {
+    return 'high';
+  }
+  if (category === 'maintenance') return 'normal';
+  return 'normal';
+}
+
+function suggestedDueAt(priority: TicketPriority, category: string | null | undefined) {
+  const date = new Date();
+  const hours = priority === 'urgent'
+    ? 24
+    : priority === 'high'
+      ? 48
+      : category === 'maintenance'
+        ? 72
+        : 7 * 24;
+  date.setHours(date.getHours() + hours);
+  date.setMinutes(0, 0, 0);
+  return date.toISOString();
+}
+
 function MessageContent({ content }: { content: string }) {
   const lines = content.split('\n');
   return (
@@ -140,9 +246,109 @@ function MessageContent({ content }: { content: string }) {
   );
 }
 
+function AiSuggestionPanel({
+  channel,
+  preview,
+  onClassify,
+  onDraft,
+  onUseDraft,
+  onCreateTicket,
+}: {
+  channel: 'Gmail' | 'Inbox';
+  preview: AiPreviewState;
+  onClassify: () => void;
+  onDraft: () => void;
+  onUseDraft: () => void;
+  onCreateTicket: () => void;
+}) {
+  const confidence = confidenceLabel(preview.classification?.confidence);
+
+  return (
+    <div className="border-b bg-card/70 px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="flex size-7 items-center justify-center rounded-lg border bg-background text-brand">
+              <Bot className="size-3.5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">Suggestion IA</p>
+              <p className="text-[11px] text-muted-foreground">
+                Aperçu uniquement: aucune catégorie, ticket ou réponse n&apos;est enregistré automatiquement.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={onClassify} disabled={preview.classifying}>
+            <Sparkles className="size-3.5 text-brand" />
+            {preview.classifying ? 'Analyse...' : 'Classer'}
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={onDraft} disabled={preview.drafting}>
+            <MessageSquare className="size-3.5" />
+            {preview.drafting ? 'Préparation...' : 'Préparer réponse'}
+          </Button>
+        </div>
+      </div>
+
+      {preview.error && (
+        <div className="mt-3 flex items-center gap-2 text-xs text-destructive">
+          <AlertCircle className="size-3.5" />
+          {preview.error}
+        </div>
+      )}
+
+      {(preview.classification || preview.draft) && (
+        <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          {preview.classification && (
+            <div className="space-y-2 rounded-md bg-muted/50 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className={cn('border text-[10px]', CATEGORY_COLORS[preview.classification.category as Conversation['category']] ?? CATEGORY_COLORS.autre)}>
+                  {preview.classification.category}
+                </Badge>
+                {confidence && <span className="text-xs text-muted-foreground">{confidence} confiance</span>}
+                {preview.classification.model && <span className="text-xs text-muted-foreground">{preview.classification.model}</span>}
+              </div>
+              <p className="text-sm leading-6">{preview.classification.summary || 'Aucun résumé fourni.'}</p>
+            </div>
+          )}
+
+          {preview.draft && (
+            <div className="space-y-2 rounded-md bg-muted/50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Brouillon {channel}
+                </p>
+                {preview.draft.model && <span className="text-xs text-muted-foreground">{preview.draft.model}</span>}
+              </div>
+              <div className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-md bg-background p-2 text-sm leading-6">
+                {preview.draft.draft}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(preview.classification || preview.draft) && (
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={onCreateTicket}>
+            <Plus className="size-3.5" />
+            Préremplir ticket
+          </Button>
+          <Button size="sm" className="h-8 gap-1.5 bg-brand text-brand-foreground hover:bg-brand/90" onClick={onUseDraft} disabled={!preview.draft}>
+            <CheckCircle2 className="size-3.5" />
+            Utiliser le brouillon
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function InboxView() {
   const { t } = useLanguage();
   const { activeWorkspace } = useWorkspace();
+  const router = useRouter();
   const supabase = createClient();
 
   const [conversations, setConversations] = useState<ConversationWithTenant[]>([]);
@@ -178,6 +384,14 @@ export function InboxView() {
   const [gmailDocPickerOpen, setGmailDocPickerOpen] = useState(false);
   const [gmailDocLoading, setGmailDocLoading] = useState(false);
   const [gmailDraftStatus, setGmailDraftStatus] = useState('');
+  const connectedGmailConnection = gmailConnections.find(connection => connection.status === 'connected') ?? null;
+  const gmailConnectionIssue = gmailConnections.find(connection => connection.status !== 'connected') ?? null;
+  const activeAiTargetKey = selectedGmailThread
+    ? `gmail:${selectedGmailThread.thread_id}`
+    : selected
+      ? `conversation:${selected.id}`
+      : '';
+  const [aiPreview, setAiPreview] = useState<AiPreviewState>(() => emptyAiPreview());
 
   useEffect(() => {
     if (!activeWorkspace) return;
@@ -239,7 +453,11 @@ export function InboxView() {
   useEffect(() => {
     loadGmailSuggestedDocuments();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedGmailThread?.thread_id, activeWorkspace?.id, gmailConnections[0]?.email]);
+  }, [selectedGmailThread?.thread_id, activeWorkspace?.id, connectedGmailConnection?.email]);
+
+  useEffect(() => {
+    setAiPreview(emptyAiPreview(activeAiTargetKey));
+  }, [activeAiTargetKey]);
 
   async function loadConversations() {
     if (!activeWorkspace) return;
@@ -269,7 +487,13 @@ export function InboxView() {
       if (!res.ok) throw new Error(data.error ?? 'Connexion Gmail indisponible');
       const connections = (data.connections ?? []) as GmailConnectionSummary[];
       setGmailConnections(connections);
-      if (connections.length > 0) await loadGmailThreads(connections[0].id);
+      const connected = connections.find(connection => connection.status === 'connected');
+      if (connected) {
+        await loadGmailThreads(connected.id);
+      } else {
+        setGmailThreads([]);
+        setSelectedGmailThread(null);
+      }
     } catch (e) {
       setGmailError(e instanceof Error ? e.message : 'Connexion Gmail indisponible');
     }
@@ -277,8 +501,11 @@ export function InboxView() {
 
   async function loadGmailThreads(connectionId?: string) {
     if (!activeWorkspace) return;
-    const id = connectionId ?? gmailConnections[0]?.id;
-    if (!id) return;
+    const id = connectionId ?? connectedGmailConnection?.id;
+    if (!id) {
+      setGmailThreads([]);
+      return;
+    }
     setGmailLoading(true);
     setGmailError('');
     try {
@@ -365,7 +592,7 @@ export function InboxView() {
 
   function gmailReplyTarget(thread = selectedGmailThread) {
     if (!thread) return null;
-    const accountEmail = gmailConnections[0]?.email?.toLowerCase();
+    const accountEmail = connectedGmailConnection?.email?.toLowerCase();
     const latestIncoming = [...(thread.messages ?? [])]
       .reverse()
       .find(message =>
@@ -385,13 +612,13 @@ export function InboxView() {
 
   function buildGmailComposerData() {
     const target = gmailReplyTarget();
-    if (!activeWorkspace || !selectedGmailThread || !gmailConnections[0] || !target?.email) {
+    if (!activeWorkspace || !selectedGmailThread || !connectedGmailConnection || !target?.email) {
       return null;
     }
 
     const form = new FormData();
     form.append('workspace_id', activeWorkspace.id);
-    form.append('connection_id', gmailConnections[0].id);
+    form.append('connection_id', connectedGmailConnection.id);
     form.append('to', target.email);
     form.append('subject', gmailReplySubject());
     form.append('body', cleanEmailBody(gmailDraft));
@@ -403,24 +630,122 @@ export function InboxView() {
     return form;
   }
 
-  async function handleGmailAiDraft() {
-    if (!activeWorkspace || !selectedGmailThread) return;
-    const target = gmailReplyTarget();
-    if (!target?.email) {
-      setGmailDraftStatus('Destinataire Gmail introuvable.');
-      return;
-    }
-    setGmailAiDrafting(true);
-    setGmailDraftStatus('');
+  function findTenantByEmail(email: string | null | undefined) {
+    const normalized = email?.toLowerCase().trim();
+    if (!normalized) return null;
+    return tenants.find(tenant => tenant.email?.toLowerCase() === normalized) ?? null;
+  }
 
-    const context = [
-      'Canal: Gmail',
-      `Répondre à: ${target.name} <${target.email}>`,
-      `Sujet: ${selectedGmailThread.subject || '(Sans objet)'}`,
-      '',
-      'Thread Gmail:',
-      selectedGmailBody,
-    ].join('\n');
+  function buildCurrentAiTarget(): AiTarget | null {
+    if (selectedGmailThread) {
+      const target = gmailReplyTarget();
+      const senderEmail = target?.email ?? selectedGmailThread.reply_to_email ?? selectedGmailThread.from_email;
+      const matchedTenant = findTenantByEmail(senderEmail);
+      const subject = selectedGmailThread.subject || 'Demande Gmail';
+      const message = selectedGmailBody || selectedGmailThread.snippet || subject;
+      const context = [
+        'Canal: Gmail',
+        senderEmail ? `Expéditeur: ${target?.name ?? senderEmail} <${senderEmail}>` : null,
+        `Sujet: ${subject}`,
+        '',
+        'Thread Gmail:',
+        selectedGmailBody || selectedGmailThread.snippet || '',
+      ].filter(Boolean).join('\n');
+
+      return {
+        key: `gmail:${selectedGmailThread.thread_id}`,
+        channel: 'Gmail',
+        subject,
+        message,
+        context,
+        tenantId: matchedTenant?.id ?? null,
+        senderEmail: senderEmail ?? null,
+        recipientName: target?.name ?? selectedGmailSender,
+      };
+    }
+
+    if (selected) {
+      const tenant = selected.tenants;
+      const displayName = tenant ? `${tenant.first_name} ${tenant.last_name}` : 'Locataire';
+      const latestTenantMessage = [...messages].reverse().find(message => message.role === 'tenant');
+      const timeline = messages
+        .slice(-8)
+        .map(message => `${message.role === 'tenant' ? displayName : 'Gestionnaire'}: ${message.content}`)
+        .join('\n');
+
+      return {
+        key: `conversation:${selected.id}`,
+        channel: 'Inbox',
+        subject: selected.subject,
+        message: (latestTenantMessage?.content ?? timeline) || selected.subject,
+        context: timeline || selected.subject,
+        tenantId: selected.tenant_id ?? null,
+        conversationId: selected.id,
+        recipientName: displayName,
+      };
+    }
+
+    return null;
+  }
+
+  async function handlePreviewAiClassification() {
+    if (!activeWorkspace) return;
+    const target = buildCurrentAiTarget();
+    if (!target) return;
+
+    setAiPreview(prev => ({
+      ...prev,
+      targetKey: target.key,
+      classifying: true,
+      error: '',
+    }));
+
+    try {
+      const res = await fetch('/api/agent/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspace_id: activeWorkspace.id,
+          message: target.message,
+          tenant_id: target.tenantId,
+          conversation_id: target.conversationId,
+          sender_email: target.senderEmail,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(agentErrorMessage(data));
+      const classification: AiClassificationPreview = {
+        category: String(data.category ?? 'autre'),
+        confidence: typeof data.confidence === 'number' ? data.confidence : Number(data.confidence ?? 0),
+        summary: String(data.summary ?? ''),
+        tenant_id: typeof data.tenant_id === 'string' ? data.tenant_id : null,
+        identity_confidence: typeof data.identity_confidence === 'number' ? data.identity_confidence : null,
+        model: typeof data.model === 'string' ? data.model : null,
+        latency_ms: typeof data.latency_ms === 'number' ? data.latency_ms : null,
+      };
+      setAiPreview(prev => prev.targetKey === target.key
+        ? { ...prev, classification, classifying: false, error: '' }
+        : prev);
+    } catch (e) {
+      setAiPreview(prev => prev.targetKey === target.key
+        ? { ...prev, classifying: false, error: e instanceof Error ? e.message : 'Agent IA indisponible.' }
+        : prev);
+    }
+  }
+
+  async function handlePreviewAiDraft() {
+    if (!activeWorkspace) return;
+    const target = buildCurrentAiTarget();
+    if (!target) return;
+
+    if (target.channel === 'Gmail') setGmailAiDrafting(true);
+    if (target.channel === 'Inbox') setDrafting(true);
+    setAiPreview(prev => ({
+      ...prev,
+      targetKey: target.key,
+      drafting: true,
+      error: '',
+    }));
 
     try {
       const res = await fetch('/api/agent/draft', {
@@ -428,24 +753,53 @@ export function InboxView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspace_id: activeWorkspace.id,
-          sender_email: target.email,
-          subject: gmailReplySubject(),
-          context,
-          recipient_name: target.name,
+          conversation_id: target.conversationId,
+          tenant_id: target.tenantId,
+          sender_email: target.senderEmail,
+          subject: target.subject,
+          context: target.context,
+          recipient_name: target.recipientName,
           tone: 'formal',
         }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setGmailDraft(withGmailSignature(data.draft ?? ''));
-      } else {
-        setGmailDraftStatus(agentErrorMessage(data));
-      }
-    } catch {
-      setGmailDraftStatus('Agent IA indisponible.');
+      if (!res.ok) throw new Error(agentErrorMessage(data));
+      const draft: AiDraftPreview = {
+        draft: String(data.draft ?? ''),
+        subject: String(data.subject ?? target.subject),
+        tenant_id: typeof data.tenant_id === 'string' ? data.tenant_id : null,
+        identity_confidence: typeof data.identity_confidence === 'number' ? data.identity_confidence : null,
+        model: typeof data.model === 'string' ? data.model : null,
+        latency_ms: typeof data.latency_ms === 'number' ? data.latency_ms : null,
+      };
+      setAiPreview(prev => prev.targetKey === target.key
+        ? { ...prev, draft, drafting: false, error: '' }
+        : prev);
+    } catch (e) {
+      setAiPreview(prev => prev.targetKey === target.key
+        ? { ...prev, drafting: false, error: e instanceof Error ? e.message : 'Agent IA indisponible.' }
+        : prev);
     } finally {
       setGmailAiDrafting(false);
+      setDrafting(false);
     }
+  }
+
+  function handleUseAiDraftPreview() {
+    if (!aiPreview.draft || aiPreview.targetKey !== activeAiTargetKey) return;
+    if (selectedGmailThread) {
+      setGmailDraft(withGmailSignature(aiPreview.draft.draft));
+      setGmailDraftStatus('Brouillon IA appliqué localement. Relisez avant brouillon Gmail ou envoi.');
+      return;
+    }
+    if (selected) {
+      setCompose(aiPreview.draft.draft);
+      setAiError('');
+    }
+  }
+
+  async function handleGmailAiDraft() {
+    await handlePreviewAiDraft();
   }
 
   function handleAddGmailAttachments(files: FileList | null) {
@@ -551,7 +905,7 @@ export function InboxView() {
   }
 
   async function handleSubmitGmailMessage(action: 'draft' | 'send') {
-    if (!activeWorkspace || !selectedGmailThread || !gmailConnections[0]) return;
+    if (!activeWorkspace || !selectedGmailThread || !connectedGmailConnection) return;
     const target = gmailReplyTarget();
     if (!target?.email) {
       setGmailDraftStatus('Destinataire Gmail introuvable.');
@@ -581,7 +935,7 @@ export function InboxView() {
         setGmailDraft('');
         setGmailAttachments([]);
         setGmailSelectedDocumentIds([]);
-        const refreshed = await loadGmailThreads(gmailConnections[0].id);
+        const refreshed = await loadGmailThreads(connectedGmailConnection.id);
         const refreshedThread = refreshed?.find(thread => thread.thread_id === selectedGmailThread.thread_id);
         if (refreshedThread) selectGmailThread(refreshedThread);
         setGmailDraftStatus('Email envoyé depuis Gmail.');
@@ -609,41 +963,7 @@ export function InboxView() {
   }
 
   async function handleAiDraft() {
-    if (!selected || !activeWorkspace) return;
-    setDrafting(true);
-    const tenant = selected.tenants;
-    const tenantName = tenant ? `${tenant.first_name} ${tenant.last_name}` : undefined;
-    const context = messages
-      .slice(-6)
-      .map(m => `${m.role === 'tenant' ? (tenantName ?? 'Locataire') : 'Gestionnaire'}: ${m.content}`)
-      .join('\n');
-
-    try {
-      const res = await fetch('/api/agent/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workspace_id: activeWorkspace.id,
-          conversation_id: selected.id,
-          tenant_id: selected.tenant_id ?? null,
-          subject: selected.subject,
-          context: context || selected.subject,
-          recipient_name: tenantName,
-          tone: 'formal',
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        const { draft } = data;
-        setCompose(draft ?? '');
-        setAiError('');
-      } else {
-        setAiError(agentErrorMessage(data));
-      }
-    } catch {
-      setAiError('Agent IA indisponible.');
-    }
-    setDrafting(false);
+    await handlePreviewAiDraft();
   }
 
   async function handleCreateConversation() {
@@ -723,6 +1043,115 @@ export function InboxView() {
     }
   }
 
+  function currentAiClassification() {
+    return aiPreview.targetKey === activeAiTargetKey ? aiPreview.classification : null;
+  }
+
+  function openTicketPrefill(prefill: TicketPrefill) {
+    const fallbackParams = new URLSearchParams({
+      new: '1',
+      title: prefill.title,
+      description: prefill.description,
+      source: prefill.source,
+      source_ref: prefill.source_ref,
+    });
+    if (prefill.tenant_id) fallbackParams.set('tenant_id', prefill.tenant_id);
+    if (prefill.priority) fallbackParams.set('priority', prefill.priority);
+    if (prefill.due_at) fallbackParams.set('due_at', prefill.due_at);
+    if (prefill.ai_summary) fallbackParams.set('ai_summary', prefill.ai_summary);
+    if (prefill.ai_category) fallbackParams.set('ai_category', prefill.ai_category);
+    if (typeof prefill.ai_confidence === 'number') fallbackParams.set('ai_confidence', String(prefill.ai_confidence));
+
+    try {
+      const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      window.sessionStorage.setItem(`${TICKET_PREFILL_STORAGE_PREFIX}${id}`, JSON.stringify(prefill));
+      router.push(`/tickets?new=1&prefill_id=${encodeURIComponent(id)}`);
+    } catch {
+      router.push(`/tickets?${fallbackParams.toString()}`);
+    }
+  }
+
+  function handleCreateTicketFromConversation() {
+    if (!selected) return;
+    const latestTenantMessage = [...messages]
+      .reverse()
+      .find(message => message.role === 'tenant');
+    const classification = currentAiClassification();
+    const category = classification?.category ?? selected.category;
+    const sourceText = messages
+      .slice(-8)
+      .map(message => `${message.role === 'tenant' ? 'Locataire' : message.role === 'ai' ? 'Agent IA' : 'Gestionnaire'}: ${message.content}`)
+      .join('\n\n');
+    const priority = suggestedPriority(category, `${latestTenantMessage?.content ?? ''} ${classification?.summary ?? ''}`);
+    const description = [
+      `Source: Inbox isimple`,
+      `Conversation: ${selected.subject}`,
+      classification?.summary ? `Suggestion IA: ${classification.summary}` : null,
+      '',
+      'Derniers messages:',
+      sourceText || latestTenantMessage?.content || selected.subject,
+    ].filter(Boolean).join('\n');
+
+    openTicketPrefill({
+      title: truncateText(classification?.summary || selected.subject, 180),
+      description: truncateText(description),
+      priority,
+      due_at: suggestedDueAt(priority, category),
+      tenant_id: selected.tenant_id ?? classification?.tenant_id ?? null,
+      source: 'inbox',
+      source_ref: selected.id,
+      source_label: 'Inbox isimple',
+      source_subject: selected.subject,
+      source_sender_name: tenantName(selected),
+      ai_summary: classification?.summary ?? null,
+      ai_category: classification?.category ?? null,
+      ai_confidence: classification?.confidence ?? null,
+      responsibility: category === 'maintenance' ? 'provider' : 'unknown',
+    });
+  }
+
+  function handleCreateTicketFromGmail() {
+    if (!selectedGmailThread) return;
+    const target = gmailReplyTarget();
+    const senderEmail = target?.email ?? selectedGmailThread.reply_to_email ?? selectedGmailThread.from_email;
+    const matchedTenant = findTenantByEmail(senderEmail);
+    const classification = currentAiClassification();
+    const category = classification?.category ?? null;
+    const priority = suggestedPriority(category, `${selectedGmailBody} ${classification?.summary ?? ''}`);
+    const description = [
+      'Source: Gmail',
+      senderEmail ? `Contact: ${target?.name ?? senderEmail} <${senderEmail}>` : null,
+      `Sujet: ${selectedGmailThread.subject || '(Sans objet)'}`,
+      selectedGmailThread.received_at ? `Reçu: ${fmtTime(selectedGmailThread.received_at)}` : null,
+      classification?.summary ? `Suggestion IA: ${classification.summary}` : null,
+      '',
+      'Thread:',
+      selectedGmailBody || selectedGmailThread.snippet || '',
+    ].filter(Boolean).join('\n');
+
+    openTicketPrefill({
+      title: truncateText(classification?.summary || selectedGmailThread.subject || 'Demande Gmail', 180),
+      description: truncateText(description),
+      priority,
+      due_at: suggestedDueAt(priority, category),
+      tenant_id: matchedTenant?.id ?? classification?.tenant_id ?? null,
+      source: 'gmail',
+      source_ref: selectedGmailThread.thread_id,
+      source_label: 'Gmail',
+      source_subject: selectedGmailThread.subject,
+      source_sender_name: target?.name ?? selectedGmailSender,
+      source_sender_email: senderEmail ?? null,
+      ai_summary: classification?.summary ?? null,
+      ai_category: classification?.category ?? null,
+      ai_confidence: classification?.confidence ?? null,
+      responsibility: category === 'maintenance' ? 'provider' : 'unknown',
+      gmail_message_id: selectedGmailThread.message_id,
+      received_at: selectedGmailThread.received_at,
+    });
+  }
+
   const tenantName = (c: ConversationWithTenant) =>
     c.tenants ? `${c.tenants.first_name} ${c.tenants.last_name}` : 'Inconnu';
 
@@ -733,11 +1162,16 @@ export function InboxView() {
   const showGmail = sourceFilter === 'all' || sourceFilter === 'gmail';
   const showIsimple = sourceFilter === 'all' || sourceFilter === 'isimple';
   const hasVisibleItems = (showGmail && gmailThreads.length > 0) || (showIsimple && conversations.length > 0);
-  const sourceOptions: Array<{ id: SourceFilter; label: string; count: number; disabled?: boolean }> = [
+  const gmailStatusText = gmailConnectionIssue?.status === 'revoked'
+    ? 'Accès Gmail à reconnecter.'
+    : gmailConnectionIssue?.status === 'error'
+      ? 'Connexion Gmail en erreur.'
+      : '';
+  const sourceOptions: Array<{ id: SourceFilter; label: string; count: number; unavailable?: boolean }> = [
     { id: 'all', label: 'Tous', count: conversations.length + gmailThreads.length },
     { id: 'isimple', label: 'isimple', count: conversations.length },
     { id: 'gmail', label: 'Gmail', count: gmailThreads.length },
-    { id: 'whatsapp', label: 'WhatsApp', count: 0, disabled: true },
+    { id: 'whatsapp', label: 'WhatsApp', count: 0, unavailable: true },
   ];
   const selectedGmailSender = selectedGmailThread
     ? selectedGmailThread.reply_to_name || selectedGmailThread.from_name || selectedGmailThread.reply_to_email || selectedGmailThread.from_email || 'Expéditeur Gmail'
@@ -771,6 +1205,9 @@ export function InboxView() {
   const selectedGmailDocs = gmailSelectedDocumentIds
     .map(id => gmailSuggestedDocs.find(doc => doc.id === id))
     .filter((doc): doc is GmailSuggestedDocument => Boolean(doc));
+  const visibleAiPreview = aiPreview.targetKey === activeAiTargetKey
+    ? aiPreview
+    : emptyAiPreview(activeAiTargetKey);
 
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] min-h-[560px] overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -791,14 +1228,13 @@ export function InboxView() {
               <button
                 key={option.id}
                 type="button"
-                disabled={option.disabled}
                 onClick={() => handleSourceFilter(option.id)}
                 className={cn(
                   'flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors',
                   sourceFilter === option.id
                     ? 'border-foreground bg-foreground text-background'
                     : 'border-border text-muted-foreground hover:text-foreground',
-                  option.disabled && 'cursor-not-allowed opacity-40 hover:text-muted-foreground'
+                  option.unavailable && sourceFilter !== option.id && 'border-dashed'
                 )}
               >
                 <span>{option.label}</span>
@@ -814,7 +1250,7 @@ export function InboxView() {
         </div>
 
         <div className="border-b bg-background/60 px-3 py-2.5">
-          {gmailConnections.length === 0 ? (
+          {!connectedGmailConnection && gmailConnections.length === 0 ? (
             <div className="space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -828,21 +1264,44 @@ export function InboxView() {
               {gmailNotice && <p className="text-[11px] text-emerald-600">{gmailNotice}</p>}
               {gmailError && <p className="text-[11px] text-destructive">{gmailError}</p>}
             </div>
+          ) : !connectedGmailConnection && gmailConnectionIssue ? (
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="size-3 text-amber-600" />
+                    <p className="truncate text-xs font-semibold">{gmailConnectionIssue.email}</p>
+                  </div>
+                  <p className="text-[11px] leading-4 text-muted-foreground">
+                    {gmailStatusText}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={handleConnectGmail}>
+                  Reconnecter
+                </Button>
+              </div>
+              {gmailNotice && <p className="text-[11px] text-emerald-600">{gmailNotice}</p>}
+              {gmailError && <p className="text-[11px] text-destructive">{gmailError}</p>}
+            </div>
           ) : (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <CheckCircle2 className="size-3 text-emerald-500" />
-                    <p className="truncate text-xs font-semibold">{gmailConnections[0].email}</p>
+                    <p className="truncate text-xs font-semibold">{connectedGmailConnection?.email}</p>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Emails Gmail</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {connectedGmailConnection?.last_sync_at
+                      ? `Synchronisé ${fmtTime(connectedGmailConnection.last_sync_at)}`
+                      : 'Emails Gmail'}
+                  </p>
                 </div>
                 <Button
                   size="icon"
                   variant="ghost"
                   className="size-7 rounded-lg"
-                  onClick={() => loadGmailThreads(gmailConnections[0].id)}
+                  onClick={() => connectedGmailConnection && loadGmailThreads(connectedGmailConnection.id)}
                   disabled={gmailLoading}
                   title="Rafraîchir Gmail"
                 >
@@ -858,16 +1317,30 @@ export function InboxView() {
         <div className="flex-1 overflow-y-auto">
           {!hasVisibleItems ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-muted-foreground">
-              <MessageSquare className="size-8 opacity-30" />
-              <p className="text-xs">
-                {sourceFilter === 'gmail'
-                  ? gmailConnections.length === 0 ? 'Connectez Gmail pour voir les emails.' : 'Aucun email récent.'
-                  : sourceFilter === 'whatsapp' ? 'WhatsApp sera ajouté comme canal connecté.'
-                    : t.inbox.emptyList}
-              </p>
-              {sourceFilter === 'gmail' && gmailConnections.length === 0 && (
+              {sourceFilter === 'whatsapp' ? (
+                <>
+                  <MessageCircle className="size-8 opacity-30" />
+                  <p className="text-xs font-medium text-foreground">WhatsApp indisponible</p>
+                  <p className="max-w-[220px] text-xs leading-5">
+                    Le canal WhatsApp n&apos;est pas encore connecté. Les messages isimple et Gmail restent disponibles.
+                  </p>
+                  <Button size="sm" variant="outline" className="h-8" disabled>
+                    Connexion à venir
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="size-8 opacity-30" />
+                  <p className="text-xs">
+                    {sourceFilter === 'gmail'
+                      ? !connectedGmailConnection ? 'Reconnectez Gmail pour voir les emails.' : 'Aucun email récent.'
+                      : t.inbox.emptyList}
+                  </p>
+                </>
+              )}
+              {sourceFilter === 'gmail' && !connectedGmailConnection && (
                 <Button size="sm" variant="outline" className="h-8" onClick={handleConnectGmail}>
-                  Connecter Gmail
+                  {gmailConnections.length > 0 ? 'Reconnecter Gmail' : 'Connecter Gmail'}
                 </Button>
               )}
             </div>
@@ -991,6 +1464,10 @@ export function InboxView() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={handleCreateTicketFromGmail}>
+                  <Plus className="size-3.5" />
+                  Ticket
+                </Button>
                 <Badge variant="outline" className="text-[10px]">Gmail</Badge>
                 <div className="hidden items-center gap-1.5 rounded-full border bg-brand-muted px-2 py-1 text-[11px] font-medium text-brand sm:flex">
                   <Bot className="size-3" />
@@ -1003,6 +1480,15 @@ export function InboxView() {
               <Bot className="size-3.5 text-brand" />
               Email reçu depuis Gmail. Vous pouvez générer une réponse, créer un brouillon ou envoyer depuis la plateforme.
             </div>
+
+            <AiSuggestionPanel
+              channel="Gmail"
+              preview={visibleAiPreview}
+              onClassify={handlePreviewAiClassification}
+              onDraft={handlePreviewAiDraft}
+              onUseDraft={handleUseAiDraftPreview}
+              onCreateTicket={handleCreateTicketFromGmail}
+            />
 
             {gmailDraftStatus && (
               <div className={cn(
@@ -1057,7 +1543,7 @@ export function InboxView() {
                         </div>
                         <div className="mt-3 grid gap-1 border-t pt-2 text-[11px] text-muted-foreground">
                           <span>De : {message.from_name || message.from_email || 'inconnu'} {message.from_email ? `<${message.from_email}>` : ''}</span>
-                          <span>Vers : {message.to_emails.join(', ') || gmailConnections[0]?.email || 'Gmail'}</span>
+                          <span>Vers : {message.to_emails.join(', ') || connectedGmailConnection?.email || 'Gmail'}</span>
                         </div>
                       </div>
                     </div>
@@ -1202,6 +1688,10 @@ export function InboxView() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={handleCreateTicketFromConversation}>
+                  <Plus className="size-3.5" />
+                  Ticket
+                </Button>
                 <Badge className={cn('border text-[10px]', CATEGORY_COLORS[selected.category])}>
                   {t.inbox.categories[selected.category as keyof typeof t.inbox.categories]}
                 </Badge>
@@ -1225,6 +1715,15 @@ export function InboxView() {
                 {aiError}
               </div>
             )}
+
+            <AiSuggestionPanel
+              channel="Inbox"
+              preview={visibleAiPreview}
+              onClassify={handlePreviewAiClassification}
+              onDraft={handlePreviewAiDraft}
+              onUseDraft={handleUseAiDraftPreview}
+              onCreateTicket={handleCreateTicketFromConversation}
+            />
 
             <div className="flex-1 space-y-3 overflow-y-auto p-4">
               {messages.map(msg => {

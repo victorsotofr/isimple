@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { getServiceSupabase } from '@/lib/supabase';
-
-const AGENT_URL = process.env.AGENT_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? 'http://localhost:8000';
+import { AGENT_URL, agentJsonHeaders } from '@/app/api/agent/_utils';
 
 async function getUser() {
   const cookieStore = await cookies();
@@ -44,33 +43,47 @@ async function getAccessibleDocument(
   return { doc };
 }
 
-async function triggerDocumentIndex(workspaceId: string, documentId: string) {
+async function agentFailureMessage(response: Response, operation: string) {
+  const text = await response.text();
+  let detail = text;
+
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (process.env.AGENT_INTERNAL_TOKEN) {
-      headers['X-Agent-Token'] = process.env.AGENT_INTERNAL_TOKEN;
+    const parsed = JSON.parse(text) as { detail?: unknown; error?: unknown };
+    if (typeof parsed.detail === 'string') {
+      detail = parsed.detail;
+    } else if (typeof parsed.error === 'string') {
+      detail = parsed.error;
     }
-    await fetch(`${AGENT_URL}/api/documents/index`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ workspace_id: workspaceId, document_id: documentId }),
-    });
-  } catch (error) {
-    console.warn('[documents/index] agent unavailable:', error);
+  } catch {
+    // Keep the raw response body when the agent does not return JSON.
+  }
+
+  return `${operation} failed (${response.status}): ${detail || response.statusText}`;
+}
+
+async function triggerDocumentIndex(workspaceId: string, documentId: string) {
+  const response = await fetch(`${AGENT_URL}/api/documents/index`, {
+    method: 'POST',
+    headers: agentJsonHeaders(),
+    body: JSON.stringify({ workspace_id: workspaceId, document_id: documentId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await agentFailureMessage(response, 'documents/index'));
   }
 }
 
 async function triggerDocumentUnindex(workspaceId: string, documentId: string) {
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (process.env.AGENT_INTERNAL_TOKEN) {
-      headers['X-Agent-Token'] = process.env.AGENT_INTERNAL_TOKEN;
-    }
-    await fetch(`${AGENT_URL}/api/documents/unindex`, {
+    const response = await fetch(`${AGENT_URL}/api/documents/unindex`, {
       method: 'POST',
-      headers,
+      headers: agentJsonHeaders(),
       body: JSON.stringify({ workspace_id: workspaceId, document_id: documentId }),
     });
+
+    if (!response.ok) {
+      console.warn('[documents/unindex] agent error:', await agentFailureMessage(response, 'documents/unindex'));
+    }
   } catch (error) {
     console.warn('[documents/unindex] agent unavailable:', error);
   }
@@ -126,7 +139,16 @@ export async function PATCH(
   }
 
   if (shouldIndex) {
-    await triggerDocumentIndex(data.workspace_id, id);
+    try {
+      await triggerDocumentIndex(data.workspace_id, id);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Agent indisponible';
+      console.warn('[documents/index] agent error:', detail);
+      return NextResponse.json(
+        { error: 'Indexation documentaire échouée', detail, document: data },
+        { status: 502 }
+      );
+    }
   }
 
   return NextResponse.json(data);

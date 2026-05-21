@@ -8,7 +8,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
   Building2, Home, Car, Store, ChevronRight, MoreHorizontal, Pencil, Trash2,
-  FileText, Plus, Ticket, Wrench, Eye,
+  FileText, Plus, Ticket, Wrench, Eye, CalendarClock, ShieldCheck, CheckCircle2,
+  AlertCircle, Clock3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +26,7 @@ import { useLanguage } from '@/contexts/language-context';
 import { createClient } from '@/lib/supabase-browser';
 import { cn } from '@/lib/utils';
 import type { Lot, Tenant, Lease, Document } from '@/db';
+import type { Provider, Ticket as TicketRow, TicketPriority, TicketStatus } from '@/db/types';
 
 const lotSchema = z.object({
   address: z.string().min(2),
@@ -46,9 +48,68 @@ const TYPE_ICONS: Record<Lot['type'], React.ElementType> = {
   other: Building2,
 };
 
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  open: 'Ouvert',
+  in_progress: 'En cours',
+  waiting_provider: 'Prestataire',
+  resolved: 'Résolu',
+  closed: 'Clôturé',
+};
+
+const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
+  low: 'Basse',
+  normal: 'Normale',
+  high: 'Haute',
+  urgent: 'Urgente',
+};
+
 type TabId = 'info' | 'tenants' | 'documents' | 'tickets' | 'prestataires';
 type LeaseWithTenant = Lease & { tenant: Tenant | null };
 type DocTenantRow = { tenant: Tenant | null; document: Document };
+type TicketProvider = Pick<Provider, 'id' | 'name' | 'specialty' | 'phone' | 'email' | 'active'>;
+type LotTicket = TicketRow & { provider: TicketProvider | null };
+type LinkedProvider = TicketProvider & {
+  ticketCount: number;
+  openTicketCount: number;
+  latestTicketAt: string;
+};
+type ComplianceStatus = 'missing' | 'pending_review' | 'complete' | 'waived';
+type ComplianceItemRow = {
+  id: string;
+  item_type: string;
+  label: string;
+  status: ComplianceStatus;
+  due_at: string | null;
+  document_id: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+};
+type ComplianceChecklistItem = {
+  key: string;
+  itemType: string;
+  label: string;
+  status: ComplianceStatus;
+  dueAt: string | null;
+  notes: string | null;
+  document: Document | null;
+  matchedDocuments: Document[];
+  documentTypes: Document['doc_type'][];
+  source: 'document' | 'manual' | 'derived';
+};
+
+const REQUIRED_COMPLIANCE_CHECKS: Array<{
+  key: string;
+  itemTypes: string[];
+  label: string;
+  documentTypes: Document['doc_type'][];
+}> = [
+  { key: 'lease', itemTypes: ['lease', 'bail'], label: 'Bail signé', documentTypes: ['bail'] },
+  { key: 'move_in_inventory', itemTypes: ['move_in_inventory', 'etat_des_lieux'], label: 'État des lieux', documentTypes: ['etat_des_lieux'] },
+  { key: 'home_insurance', itemTypes: ['home_insurance', 'assurance'], label: 'Assurance habitation', documentTypes: ['assurance'] },
+  { key: 'identity', itemTypes: ['identity', 'piece_identite'], label: 'Pièce d’identité locataire', documentTypes: ['piece_identite'] },
+  { key: 'guarantee', itemTypes: ['guarantee', 'caution'], label: 'Caution ou garantie', documentTypes: ['caution'] },
+  { key: 'payment_details', itemTypes: ['payment_details', 'rib'], label: 'RIB ou coordonnées de paiement', documentTypes: ['rib'] },
+];
 
 type Occupant =
   | {
@@ -78,6 +139,9 @@ export function LotDetailView({ id }: { id: string }) {
   const [leases, setLeases] = useState<LeaseWithTenant[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [docTenants, setDocTenants] = useState<DocTenantRow[]>([]);
+  const [tickets, setTickets] = useState<LotTicket[]>([]);
+  const [complianceItems, setComplianceItems] = useState<ComplianceItemRow[]>([]);
+  const [complianceTableAvailable, setComplianceTableAvailable] = useState(true);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabId>('info');
   const [editOpen, setEditOpen] = useState(false);
@@ -91,15 +155,28 @@ export function LotDetailView({ id }: { id: string }) {
     if (!activeWorkspace) return;
     setLoading(true);
     (async () => {
-      const [lotRes, leasesRes, docsRes] = await Promise.all([
+      const [lotRes, leasesRes, docsRes, ticketsRes, complianceRes] = await Promise.all([
         supabase.from('lots').select('*').eq('id', id).eq('workspace_id', activeWorkspace.id).maybeSingle(),
         supabase.from('leases').select('*, tenant:tenants(*)').eq('lot_id', id).eq('workspace_id', activeWorkspace.id).order('start_date', { ascending: false }),
         supabase.from('documents').select('*').eq('lot_id', id).eq('workspace_id', activeWorkspace.id).order('created_at', { ascending: false }),
+        supabase
+          .from('tickets')
+          .select('*, provider:providers(id, name, specialty, phone, email, active)')
+          .eq('lot_id', id)
+          .eq('workspace_id', activeWorkspace.id)
+          .order('updated_at', { ascending: false }),
+        loadComplianceItems(supabase, activeWorkspace.id, id),
       ]);
       const docs = (docsRes.data ?? []) as Document[];
       setLot((lotRes.data ?? null) as Lot | null);
       setLeases((leasesRes.data ?? []) as LeaseWithTenant[]);
       setDocuments(docs);
+      setComplianceItems(complianceRes.items);
+      setComplianceTableAvailable(complianceRes.available);
+      setTickets(((ticketsRes.data ?? []) as LotTicket[]).map(ticket => ({
+        ...ticket,
+        provider: Array.isArray(ticket.provider) ? ticket.provider[0] ?? null : ticket.provider,
+      })));
 
       const confirmedDocs = docs.filter(d => d.status === 'confirmed');
       if (confirmedDocs.length > 0) {
@@ -196,6 +273,31 @@ export function LotDetailView({ id }: { id: string }) {
   }, [leases, docTenants]);
 
   const isOccupied = !!activeLease || docTenants.some(r => r.document.doc_type === 'bail' && r.tenant);
+  const complianceChecklist = useMemo(
+    () => buildComplianceChecklist(documents, complianceItems),
+    [documents, complianceItems],
+  );
+  const linkedProviders = useMemo<LinkedProvider[]>(() => {
+    const byId = new Map<string, LinkedProvider>();
+    for (const ticket of tickets) {
+      if (!ticket.provider) continue;
+      const current = byId.get(ticket.provider.id);
+      const isOpen = ticket.status !== 'resolved' && ticket.status !== 'closed';
+      if (current) {
+        current.ticketCount += 1;
+        if (isOpen) current.openTicketCount += 1;
+        if (ticket.updated_at > current.latestTicketAt) current.latestTicketAt = ticket.updated_at;
+      } else {
+        byId.set(ticket.provider.id, {
+          ...ticket.provider,
+          ticketCount: 1,
+          openTicketCount: isOpen ? 1 : 0,
+          latestTicketAt: ticket.updated_at,
+        });
+      }
+    }
+    return Array.from(byId.values()).sort((a, b) => b.latestTicketAt.localeCompare(a.latestTicketAt));
+  }, [tickets]);
 
   if (loading) {
     return <div className="text-sm text-muted-foreground">{t.common.loading}</div>;
@@ -270,16 +372,23 @@ export function LotDetailView({ id }: { id: string }) {
           <TabButton active={tab === 'documents'} onClick={() => setTab('documents')} count={documents.length}>
             {t.lots.detail.tabs.documents}
           </TabButton>
-          <TabButton active={tab === 'tickets'} onClick={() => setTab('tickets')} count={0}>
+          <TabButton active={tab === 'tickets'} onClick={() => setTab('tickets')} count={tickets.length}>
             {t.lots.detail.tabs.tickets}
           </TabButton>
-          <TabButton active={tab === 'prestataires'} onClick={() => setTab('prestataires')} count={0}>
+          <TabButton active={tab === 'prestataires'} onClick={() => setTab('prestataires')} count={linkedProviders.length}>
             {t.lots.detail.tabs.prestataires}
           </TabButton>
         </div>
       </div>
 
-      {tab === 'info' && <InfoTab lot={lot} t={t} />}
+      {tab === 'info' && (
+        <InfoTab
+          lot={lot}
+          t={t}
+          complianceItems={complianceChecklist}
+          complianceTableAvailable={complianceTableAvailable}
+        />
+      )}
       {tab === 'tenants' && <TenantsTab occupants={occupants} t={t} />}
       {tab === 'documents' && (
         <DocumentsTab
@@ -289,8 +398,8 @@ export function LotDetailView({ id }: { id: string }) {
           onDeleted={id => setDocuments(prev => prev.filter(d => d.id !== id))}
         />
       )}
-      {tab === 'tickets' && <EmptyTab icon={Ticket} message={t.lots.detail.ticketsSoon} />}
-      {tab === 'prestataires' && <EmptyTab icon={Wrench} message={t.lots.detail.prestatairesSoon} />}
+      {tab === 'tickets' && <TicketsTab tickets={tickets} />}
+      {tab === 'prestataires' && <ProvidersTab providers={linkedProviders} />}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-lg">
@@ -431,7 +540,17 @@ function TabButton({
   );
 }
 
-function InfoTab({ lot, t }: { lot: Lot; t: ReturnType<typeof useLanguage>['t'] }) {
+function InfoTab({
+  lot,
+  t,
+  complianceItems,
+  complianceTableAvailable,
+}: {
+  lot: Lot;
+  t: ReturnType<typeof useLanguage>['t'];
+  complianceItems: ComplianceChecklistItem[];
+  complianceTableAvailable: boolean;
+}) {
   const rows: [string, React.ReactNode][] = [
     [t.lots.address, lot.address],
     [t.lots.city, `${lot.postal_code} ${lot.city}`],
@@ -441,15 +560,327 @@ function InfoTab({ lot, t }: { lot: Lot; t: ReturnType<typeof useLanguage>['t'] 
     [t.lots.charges, `${lot.charges_amount} €`],
   ];
   return (
-    <div className="rounded-lg border divide-y">
-      {rows.map(([label, value]) => (
-        <div key={label} className="flex items-center justify-between gap-4 px-4 py-3">
-          <span className="text-sm text-muted-foreground">{label}</span>
-          <span className="text-sm">{value}</span>
-        </div>
-      ))}
+    <div className="space-y-4">
+      <div className="rounded-lg border divide-y">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between gap-4 px-4 py-3">
+            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className="text-sm">{value}</span>
+          </div>
+        ))}
+      </div>
+      <ComplianceChecklist items={complianceItems} tableAvailable={complianceTableAvailable} />
     </div>
   );
+}
+
+type OptionalSupabaseError = { code?: string; message?: string };
+type OptionalQueryBuilder = PromiseLike<{ data: unknown; error: OptionalSupabaseError | null }> & {
+  select: (columns: string) => OptionalQueryBuilder;
+  eq: (column: string, value: string) => OptionalQueryBuilder;
+  order: (column: string, options?: { ascending?: boolean; nullsFirst?: boolean }) => OptionalQueryBuilder;
+};
+type OptionalTableClient = {
+  from: (table: string) => OptionalQueryBuilder;
+};
+
+async function loadComplianceItems(client: unknown, workspaceId: string, lotId: string) {
+  try {
+    const { data, error } = await (client as OptionalTableClient)
+      .from('compliance_items')
+      .select('id, item_type, label, status, due_at, document_id, notes, metadata')
+      .eq('workspace_id', workspaceId)
+      .eq('lot_id', lotId)
+      .order('due_at', { ascending: true, nullsFirst: false });
+
+    if (error) {
+      return { items: [] as ComplianceItemRow[], available: !isMissingOptionalTable(error) };
+    }
+
+    const items = Array.isArray(data)
+      ? data.map(normalizeComplianceItem).filter((item): item is ComplianceItemRow => !!item)
+      : [];
+    return { items, available: true };
+  } catch {
+    return { items: [] as ComplianceItemRow[], available: false };
+  }
+}
+
+function isMissingOptionalTable(error: OptionalSupabaseError) {
+  const message = error.message ?? '';
+  return error.code === '42P01' || message.includes('compliance_items') || message.includes('does not exist');
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function complianceString(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+function normalizeComplianceItem(row: unknown): ComplianceItemRow | null {
+  if (!isPlainRecord(row)) return null;
+  const id = complianceString(row.id);
+  const itemType = complianceString(row.item_type);
+  const label = complianceString(row.label);
+  if (!id || !itemType || !label) return null;
+  const rawStatus = complianceString(row.status);
+  const status: ComplianceStatus = rawStatus === 'pending_review'
+    || rawStatus === 'complete'
+    || rawStatus === 'waived'
+    || rawStatus === 'missing'
+      ? rawStatus
+      : 'missing';
+
+  return {
+    id,
+    item_type: itemType,
+    label,
+    status,
+    due_at: complianceString(row.due_at) || null,
+    document_id: complianceString(row.document_id) || null,
+    notes: complianceString(row.notes) || null,
+    metadata: isPlainRecord(row.metadata) ? row.metadata : {},
+  };
+}
+
+function buildComplianceChecklist(
+  documents: Document[],
+  rows: ComplianceItemRow[],
+): ComplianceChecklistItem[] {
+  const usedRowIds = new Set<string>();
+  const baseItems = REQUIRED_COMPLIANCE_CHECKS.map(def => {
+    const row = rows.find(item => def.itemTypes.includes(item.item_type));
+    if (row) usedRowIds.add(row.id);
+    const matchedDocuments = documents.filter(document => def.documentTypes.includes(document.doc_type));
+    return buildComplianceItem({
+      key: def.key,
+      itemType: row?.item_type ?? def.key,
+      label: row?.label ?? def.label,
+      row,
+      matchedDocuments,
+      documentTypes: def.documentTypes,
+    });
+  });
+
+  const customItems = rows
+    .filter(row => !usedRowIds.has(row.id))
+    .map(row => {
+      const matchedDocuments = documents.filter(document =>
+        document.id === row.document_id || document.doc_type === row.item_type
+      );
+      return buildComplianceItem({
+        key: row.id,
+        itemType: row.item_type,
+        label: row.label,
+        row,
+        matchedDocuments,
+        documentTypes: [],
+      });
+    });
+
+  return [...baseItems, ...customItems];
+}
+
+function buildComplianceItem({
+  key,
+  itemType,
+  label,
+  row,
+  matchedDocuments,
+  documentTypes,
+}: {
+  key: string;
+  itemType: string;
+  label: string;
+  row?: ComplianceItemRow;
+  matchedDocuments: Document[];
+  documentTypes: Document['doc_type'][];
+}): ComplianceChecklistItem {
+  const confirmedDocument = matchedDocuments.find(document => document.status === 'confirmed') ?? null;
+  const pendingDocument = matchedDocuments.find(document => document.status === 'pending') ?? null;
+  const rowDocument = row?.document_id
+    ? matchedDocuments.find(document => document.id === row.document_id) ?? null
+    : null;
+  const document = rowDocument ?? confirmedDocument ?? pendingDocument;
+  const status = resolveComplianceStatus(row?.status, confirmedDocument, pendingDocument);
+
+  return {
+    key,
+    itemType,
+    label,
+    status,
+    dueAt: row?.due_at ?? null,
+    notes: row?.notes ?? null,
+    document,
+    matchedDocuments,
+    documentTypes,
+    source: row ? 'manual' : document ? 'document' : 'derived',
+  };
+}
+
+function resolveComplianceStatus(
+  rowStatus: ComplianceStatus | undefined,
+  confirmedDocument: Document | null,
+  pendingDocument: Document | null,
+): ComplianceStatus {
+  if (rowStatus === 'waived') return 'waived';
+  if (rowStatus === 'complete' || confirmedDocument) return 'complete';
+  if (rowStatus === 'pending_review' || pendingDocument) return 'pending_review';
+  return 'missing';
+}
+
+function ComplianceChecklist({
+  items,
+  tableAvailable,
+}: {
+  items: ComplianceChecklistItem[];
+  tableAvailable: boolean;
+}) {
+  const completeCount = items.filter(item => item.status === 'complete' || item.status === 'waived').length;
+  const actionCount = items.length - completeCount;
+
+  return (
+    <section className="rounded-lg border">
+      <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <ShieldCheck className="size-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">Checklist conformité</h2>
+            <p className="text-xs text-muted-foreground">
+              {completeCount}/{items.length} validés
+              {actionCount > 0 && ` · ${actionCount} à suivre`}
+            </p>
+          </div>
+        </div>
+        {!tableAvailable && (
+          <Badge variant="secondary" className="w-fit text-xs">
+            Suivi manuel non configuré
+          </Badge>
+        )}
+      </div>
+      <div className="divide-y">
+        {items.map(item => (
+          <ComplianceRow key={item.key} item={item} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ComplianceRow({ item }: { item: ComplianceChecklistItem }) {
+  const docHref = item.document
+    ? `/documents?tab=${item.document.status === 'confirmed' ? 'vault' : 'review'}&doc=${item.document.id}`
+    : null;
+  const expectedTypes = item.documentTypes.length > 0
+    ? item.documentTypes.map(type => documentTypeLabel(type)).join(', ')
+    : item.itemType.replaceAll('_', ' ');
+
+  return (
+    <div className="flex items-start gap-3 p-4">
+      <ComplianceIcon status={item.status} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium">{item.label}</p>
+          <ComplianceStatusBadge status={item.status} />
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {docHref && item.document ? (
+            <Link href={docHref} className="truncate underline underline-offset-4 hover:text-foreground">
+              {item.document.file_name}
+            </Link>
+          ) : (
+            <span>Attendu : {expectedTypes}</span>
+          )}
+          {item.dueAt && <span>Échéance {formatComplianceDate(item.dueAt)}</span>}
+          {item.source === 'manual' && <span>Suivi manuel</span>}
+        </div>
+        {item.notes && (
+          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.notes}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ComplianceIcon({ status }: { status: ComplianceStatus }) {
+  if (status === 'complete') {
+    return (
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
+        <CheckCircle2 className="size-4 text-emerald-700" />
+      </div>
+    );
+  }
+  if (status === 'pending_review') {
+    return (
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-50">
+        <Clock3 className="size-4 text-amber-700" />
+      </div>
+    );
+  }
+  if (status === 'waived') {
+    return (
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+        <ShieldCheck className="size-4 text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+      <AlertCircle className="size-4 text-destructive" />
+    </div>
+  );
+}
+
+function ComplianceStatusBadge({ status }: { status: ComplianceStatus }) {
+  const labels: Record<ComplianceStatus, string> = {
+    complete: 'Complet',
+    pending_review: 'À revoir',
+    missing: 'Manquant',
+    waived: 'Dispensé',
+  };
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'text-xs',
+        status === 'complete' && 'border-emerald-200 bg-emerald-50 text-emerald-800',
+        status === 'pending_review' && 'border-amber-200 bg-amber-50 text-amber-800',
+        status === 'missing' && 'border-destructive/30 bg-destructive/10 text-destructive',
+        status === 'waived' && 'bg-muted text-muted-foreground',
+      )}
+    >
+      {labels[status]}
+    </Badge>
+  );
+}
+
+function formatComplianceDate(value: string) {
+  return new Date(value).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function documentTypeLabel(type: Document['doc_type']) {
+  const labels: Record<Document['doc_type'], string> = {
+    bail: 'Bail',
+    caution: 'Caution',
+    quittance: 'Quittance',
+    etat_des_lieux: 'État des lieux',
+    assurance: 'Assurance',
+    rib: 'RIB',
+    caf: 'CAF',
+    piece_identite: 'Pièce d’identité',
+    mandat: 'Mandat',
+    facture: 'Facture',
+    autre: 'Autre',
+  };
+  return labels[type] ?? type;
 }
 
 function TenantsTab({ occupants, t }: { occupants: Occupant[]; t: ReturnType<typeof useLanguage>['t'] }) {
@@ -544,9 +975,10 @@ function DocumentsTab({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{doc.file_name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t.documents.types[doc.doc_type]} · {new Date(doc.created_at).toLocaleDateString()}
-                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>{t.documents.types[doc.doc_type]} · {new Date(doc.created_at).toLocaleDateString()}</span>
+                  <DocumentProcessingBadge doc={doc} />
+                </div>
               </div>
               <Badge variant={doc.status === 'confirmed' ? 'default' : 'secondary'} className="shrink-0 text-xs">
                 {doc.status === 'confirmed' ? t.documents.confirmed : t.documents.pending}
@@ -592,7 +1024,152 @@ function DocumentsTab({
   );
 }
 
-function EmptyTab({ icon: Icon, message }: { icon: React.ElementType; message: string }) {
+function DocumentProcessingBadge({ doc }: { doc: Document }) {
+  const indexed = doc.processing_status === 'indexed' || !!doc.indexed_at;
+  const failed = doc.processing_status === 'failed';
+  const label = doc.status === 'pending'
+    ? 'À confirmer'
+    : indexed
+      ? 'Indexé'
+      : failed
+        ? 'Index échoué'
+        : doc.processing_status === 'reviewed'
+          ? 'Indexation à finaliser'
+          : 'Préparé';
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'text-[10px]',
+        indexed && 'border-emerald-200 bg-emerald-50 text-emerald-800',
+        failed && 'border-destructive/30 bg-destructive/10 text-destructive',
+        doc.status === 'pending' && 'border-amber-200 bg-amber-50 text-amber-800',
+      )}
+    >
+      {label}
+    </Badge>
+  );
+}
+
+function TicketsTab({ tickets }: { tickets: LotTicket[] }) {
+  if (tickets.length === 0) {
+    return <EmptyLinkedTab icon={Ticket} message="Aucun ticket lié à ce bien." />;
+  }
+
+  return (
+    <div className="rounded-lg border divide-y">
+      {tickets.map(ticket => (
+        <Link
+          key={ticket.id}
+          href={`/tickets?ticket=${ticket.id}`}
+          className="flex items-center gap-4 p-4 hover:bg-accent/40 transition-colors"
+        >
+          <div className="flex size-9 items-center justify-center rounded-lg bg-muted shrink-0">
+            <Ticket className="size-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium text-sm truncate">{ticket.title}</p>
+              <TicketStatusBadge status={ticket.status} />
+              <TicketPriorityBadge priority={ticket.priority} />
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <CalendarClock className="size-3.5" />
+                {formatTicketDate(ticket.updated_at)}
+              </span>
+              <span>{ticket.provider?.name ?? 'Aucun prestataire'}</span>
+            </div>
+            {ticket.description && (
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                {ticket.description}
+              </p>
+            )}
+          </div>
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground/50" />
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function ProvidersTab({ providers }: { providers: LinkedProvider[] }) {
+  if (providers.length === 0) {
+    return <EmptyLinkedTab icon={Wrench} message="Aucun prestataire lié aux tickets de ce bien." />;
+  }
+
+  return (
+    <div className="rounded-lg border divide-y">
+      {providers.map(provider => (
+        <Link
+          key={provider.id}
+          href="/prestataires"
+          className="flex items-center gap-4 p-4 hover:bg-accent/40 transition-colors"
+        >
+          <div className="flex size-9 items-center justify-center rounded-lg bg-muted shrink-0">
+            <Wrench className="size-4 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium text-sm truncate">{provider.name}</p>
+              <Badge variant={provider.active ? 'default' : 'secondary'} className="text-xs">
+                {provider.active ? 'Actif' : 'Inactif'}
+              </Badge>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {provider.specialty}
+              {provider.phone ? ` · ${provider.phone}` : ''}
+              {provider.email ? ` · ${provider.email}` : ''}
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            <p className="text-sm font-medium">{provider.ticketCount}</p>
+            <p className="text-xs text-muted-foreground">
+              {provider.openTicketCount} ouverts
+            </p>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function TicketStatusBadge({ status }: { status: TicketStatus }) {
+  const done = status === 'resolved' || status === 'closed';
+  return (
+    <Badge variant={done ? 'secondary' : 'default'} className="text-xs">
+      {TICKET_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
+
+function TicketPriorityBadge({ priority }: { priority: TicketPriority }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        'text-xs',
+        priority === 'urgent' && 'border-destructive/40 text-destructive',
+        priority === 'high' && 'border-amber-500/50 text-amber-700',
+        priority === 'low' && 'text-muted-foreground',
+      )}
+    >
+      {TICKET_PRIORITY_LABELS[priority]}
+    </Badge>
+  );
+}
+
+function formatTicketDate(value: string) {
+  return new Date(value).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function EmptyLinkedTab({ icon: Icon, message }: { icon: React.ElementType; message: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground gap-3">
       <Icon className="size-10 opacity-30" />

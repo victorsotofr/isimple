@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     // Récupère l'invitation
     const { data: invitation, error: fetchError } = await admin
       .from('workspace_invitations')
-      .select('id, workspace_id, email, status, expires_at')
+      .select('id, workspace_id, email, role, status, expires_at')
       .eq('token', token)
       .single();
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     if (!existing) {
       const { error: memberError } = await admin
         .from('workspace_members')
-        .insert({ workspace_id: invitation.workspace_id, user_id: user.id, role: 'member' });
+        .insert({ workspace_id: invitation.workspace_id, user_id: user.id, role: invitation.role });
 
       if (memberError) {
         console.error('[POST /api/invitations/accept] Erreur ajout membre :', memberError);
@@ -88,6 +88,19 @@ export async function POST(request: NextRequest) {
       .from('workspace_invitations')
       .update({ status: 'accepted' })
       .eq('id', invitation.id);
+
+    const { error: auditError } = await admin.from('audit_events').insert({
+      workspace_id: invitation.workspace_id,
+      actor_user_id: user.id,
+      event_type: 'workspace_invitation_accepted',
+      entity_type: 'workspace_invitation',
+      entity_id: invitation.id,
+      summary: `Invitation acceptée par ${user.email ?? invitation.email}`,
+      metadata: { role: invitation.role },
+    });
+    if (auditError) {
+      console.warn('[POST /api/invitations/accept] Audit ignoré :', auditError.message);
+    }
 
     return NextResponse.json({ workspace_id: invitation.workspace_id });
   } catch (error) {

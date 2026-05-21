@@ -1,5 +1,27 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import {
+  getSupabaseAuthStorageKeys,
+  isInvalidRefreshTokenError,
+  isSupabaseAuthStorageName,
+} from './src/lib/supabase-auth';
+
+function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) {
+  const names = new Set([
+    ...getSupabaseAuthStorageKeys(),
+    ...request.cookies
+      .getAll()
+      .map(cookie => cookie.name)
+      .filter(name => isSupabaseAuthStorageName(name)),
+  ]);
+
+  names.forEach(name => {
+    request.cookies.delete(name);
+    response.cookies.set(name, '', { path: '/', maxAge: 0 });
+  });
+
+  return response;
+}
 
 export async function middleware(request: NextRequest) {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -8,6 +30,14 @@ export async function middleware(request: NextRequest) {
   }
 
   let supabaseResponse = NextResponse.next({ request });
+  const protectedPaths = [
+    '/inbox', '/tickets', '/lots', '/tenants', '/prospects',
+    '/agenda', '/prestataires', '/analytics', '/settings',
+    '/documents', '/profile',
+  ];
+  const isProtectedPath = protectedPaths.some(
+    path => request.nextUrl.pathname.startsWith(path)
+  );
 
   try {
     const supabase = createServerClient(
@@ -32,16 +62,18 @@ export async function middleware(request: NextRequest) {
     );
 
     // Refresh session — ne pas supprimer, nécessaire pour que le token reste valide
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error } = await supabase.auth.getUser();
 
-    // Routes protégées : groupe (app)
-    const protectedPaths = [
-      '/inbox', '/tickets', '/lots', '/tenants', '/prospects',
-      '/agenda', '/prestataires', '/analytics', '/settings',
-    ];
-    const isProtectedPath = protectedPaths.some(
-      path => request.nextUrl.pathname.startsWith(path)
-    );
+    if (error && isInvalidRefreshTokenError(error)) {
+      if (isProtectedPath) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        url.searchParams.set('redirect', request.nextUrl.pathname);
+        return clearSupabaseAuthCookies(request, NextResponse.redirect(url));
+      }
+
+      return clearSupabaseAuthCookies(request, supabaseResponse);
+    }
 
     if (!user && isProtectedPath) {
       const url = request.nextUrl.clone();

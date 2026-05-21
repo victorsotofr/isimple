@@ -13,6 +13,7 @@ isimple is an AI-native property management workspace for French rental agencies
 - Extracts structured fields, proposes document categorization, matches existing entities, and suggests new properties or tenants when no reliable match exists.
 - Keeps human review in the loop before documents become confirmed records or are sent to tenants, landlords, providers, or other channels.
 - Uses a workspace-scoped knowledge base for retrieval-augmented generation so agents answer with the right agency and tenant context.
+- Tracks operational tickets, due dates, responsibility, providers, compliance items, and agenda/analytics views so managers see what needs action next.
 
 ## Important public URLs
 - Home: ${absoluteUrl('/')}
@@ -21,7 +22,9 @@ isimple is an AI-native property management workspace for French rental agencies
 - Sitemap: ${absoluteUrl('/sitemap.xml')}
 - Robots policy: ${absoluteUrl('/robots.txt')}
 - Agent action manifest: ${absoluteUrl('/.well-known/ai-actions')}
+- MCP discovery manifest: ${absoluteUrl('/.well-known/mcp')}
 - OpenAPI descriptor: ${absoluteUrl('/api/openapi')}
+- Extended agent brief: ${absoluteUrl('/llms-full.txt')}
 
 ## Agent policy
 - Public crawlers may read the marketing site, llms.txt, sitemap, OpenAPI descriptor, and agent action manifest.
@@ -34,6 +37,8 @@ isimple is an AI-native property management workspace for French rental agencies
 - User identity and workspace membership decide which documents, tenants, messages, Gmail accounts, and vector stores an agent may use.
 - Documents are linked to workspace, optional property, optional tenant, processing status, extracted fields, storage path, and external vector file records.
 - Gmail is linked per workspace user with OAuth scopes for read-only mailbox access, compose, draft creation, attachments, and manager-triggered sending.
+- Tickets can be linked to properties, tenants, providers, source records, due dates, AI summaries, and event history.
+- Compliance items and notifications are workspace-scoped records for missing documents, review queues, and operational reminders.
 
 ## Preferred agent workflow
 1. Identify the actor and workspace.

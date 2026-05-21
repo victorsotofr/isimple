@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase-browser';
+import { createClient, getAuthenticatedUser } from '@/lib/supabase-browser';
 import { Bot, ChevronRight, Loader2, Plus } from 'lucide-react';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -18,8 +18,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) {
+      const user = await getAuthenticatedUser(supabase);
+      if (!user) {
         router.push('/login');
         return;
       }

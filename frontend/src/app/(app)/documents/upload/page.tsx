@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { Upload, FileText, X, Loader2, CheckCircle2, UserPlus, Plus, AlertCircle, ChevronLeft, ChevronRight, Trash2, ListChecks, Home } from 'lucide-react';
+import { Upload, FileText, X, Loader2, CheckCircle2, UserPlus, Plus, AlertCircle, ChevronLeft, ChevronRight, Trash2, ListChecks, Home, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -164,6 +164,7 @@ function UploadContent() {
   const [addTenantValue, setAddTenantValue] = useState('');
   const [pendingQueue, setPendingQueue] = useState<Array<{ id: string; file_name: string }>>([]);
   const [deletingDoc, setDeletingDoc] = useState(false);
+  const [indexRetryReady, setIndexRetryReady] = useState(false);
 
   useEffect(() => {
     if (!activeWorkspace) return;
@@ -178,6 +179,7 @@ function UploadContent() {
     // If reviewing an existing document
     if (reviewId) {
       (async () => {
+        setIndexRetryReady(false);
         const { data } = await supabase.from('documents').select('*').eq('id', reviewId).single();
         if (!data) return;
         const [{ data: linkRows }, urlRes, pendingRes] = await Promise.all([
@@ -269,6 +271,7 @@ function UploadContent() {
     if (files.length === 0 || !activeWorkspace) return;
     setStep('analyzing');
     setError('');
+    setIndexRetryReady(false);
 
     const initialQueue: QueueItem[] = files.map(f => ({ file: f, state: 'pending' }));
     setQueue(initialQueue);
@@ -302,8 +305,8 @@ function UploadContent() {
 
     const successes = results.filter(r => r.data).sort((a, b) => a.index - b.index);
     if (successes.length > 0) {
-      const firstReady = successes[0].data?.id;
-      router.push(firstReady ? `/documents/upload?review=${firstReady}` : '/documents?tab=review');
+      setStep('done');
+      setFiles([]);
     } else {
       setStep('idle');
       setError('Échec de l\u2019analyse — réessayez.');
@@ -346,8 +349,12 @@ function UploadContent() {
     if (!review || !activeWorkspace) return;
     setStep('saving');
     setError('');
+    setIndexRetryReady(false);
     let lotId = review.lot_id || null;
     const tenantIds = [...review.tenant_ids];
+    let createdLotId = review.created_lot_id ?? null;
+    const createdTenantIds = [...(review.created_tenant_ids ?? [])];
+    const createdTenantKeys: string[] = [];
 
     try {
       if (!lotId && review.create_lot && review.suggested_new_lot) {
@@ -367,6 +374,7 @@ function UploadContent() {
           .single();
         if (lotErr || !createdLot) throw new Error(lotErr?.message ?? 'Impossible de créer le bien');
         lotId = createdLot.id;
+        createdLotId = createdLot.id;
         setLots(prev => [createdLot as Lot, ...prev]);
       }
 
@@ -385,13 +393,37 @@ function UploadContent() {
           .single();
         if (tenantErr || !createdTenant) throw new Error(tenantErr?.message ?? 'Impossible de créer le locataire');
         tenantIds.push(createdTenant.id);
+        createdTenantIds.push(createdTenant.id);
+        createdTenantKeys.push(key);
         setTenants(prev => [createdTenant as Tenant, ...prev]);
       }
     } catch (e) {
+      if (createdLotId || createdTenantKeys.length > 0) {
+        setReview(r => r ? {
+          ...r,
+          lot_id: createdLotId ?? r.lot_id,
+          tenant_ids: Array.from(new Set(tenantIds)),
+          created_lot_id: createdLotId,
+          created_tenant_ids: Array.from(new Set([...(r.created_tenant_ids ?? []), ...createdTenantIds])),
+          create_lot: createdLotId ? false : r.create_lot,
+          create_tenant_keys: r.create_tenant_keys.filter(key => !createdTenantKeys.includes(key)),
+        } : r);
+      }
       setError(e instanceof Error ? e.message : 'Erreur lors de la création des fiches');
       setStep('review');
       return;
     }
+
+    const uniqueTenantIds = Array.from(new Set(tenantIds));
+    setReview(r => r ? {
+      ...r,
+      lot_id: lotId ?? '',
+      tenant_ids: uniqueTenantIds,
+      created_lot_id: createdLotId,
+      created_tenant_ids: Array.from(new Set([...(r.created_tenant_ids ?? []), ...createdTenantIds])),
+      create_lot: false,
+      create_tenant_keys: [],
+    } : r);
 
     const res = await fetch(`/api/documents/${review.doc_id}`, {
       method: 'PATCH',
@@ -400,7 +432,7 @@ function UploadContent() {
         status: 'confirmed',
         doc_type: review.doc_type,
         lot_id: lotId,
-        tenant_ids: Array.from(new Set(tenantIds)),
+        tenant_ids: uniqueTenantIds,
       }),
     });
     if (res.ok) {
@@ -415,7 +447,14 @@ function UploadContent() {
         setStep('done');
       }
     } else {
-      setError('Erreur lors de la confirmation');
+      const data = await res.json().catch(() => ({})) as { error?: string; detail?: string };
+      const detail = data.detail ?? data.error ?? 'Indexation documentaire échouée';
+      if (res.status === 502) {
+        setIndexRetryReady(true);
+        setError(`Document confirmé, mais indexation échouée : ${detail}`);
+      } else {
+        setError(detail || 'Erreur lors de la confirmation');
+      }
       setStep('review');
     }
   };
@@ -445,6 +484,11 @@ function UploadContent() {
           {succeeded} document{succeeded > 1 ? 's' : ''} prêt{succeeded > 1 ? 's' : ''} à réviser
           {failed > 0 && ` · ${failed} échec${failed > 1 ? 's' : ''}`}
         </p>
+        {succeeded > 0 && (
+          <p className="rounded-lg border bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+            Les documents réussis sont analysés et en attente de confirmation. L’indexation pour la recherche démarre après la confirmation humaine.
+          </p>
+        )}
         <div className="flex gap-3">
           <Button
             onClick={() => {
@@ -825,10 +869,27 @@ function UploadContent() {
             </div>
 
             {error && <p className="text-xs text-destructive">{error}</p>}
+            {indexRetryReady && (
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                Le document est déjà confirmé. Vous pouvez relancer l’indexation sans recréer le bien ou les locataires détectés.
+              </p>
+            )}
 
             <div className="flex gap-3">
               <Button onClick={handleConfirm} disabled={step === 'saving'} className="flex-1">
-                {step === 'saving' ? <><Loader2 className="size-4 mr-2 animate-spin" />Enregistrement…</> : 'Confirmer'}
+                {step === 'saving' ? (
+                  <>
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                    Confirmation et indexation…
+                  </>
+                ) : indexRetryReady ? (
+                  <>
+                    <RefreshCw className="size-4 mr-2" />
+                    Relancer l&apos;indexation
+                  </>
+                ) : (
+                  'Confirmer et indexer'
+                )}
               </Button>
             </div>
           </div>
@@ -930,6 +991,7 @@ function UploadContent() {
 
       {(files.length > 0 || queue.length > 0) && (
         <div className="rounded-lg border divide-y">
+          {isAnalyzing && <ProcessingSummary queue={queue} />}
           {(isAnalyzing ? queue : files.map(f => ({ file: f, state: 'pending' as const }))).map((entry, i) => (
             <QueueRow
               key={i}
@@ -993,6 +1055,36 @@ function DocumentSectionTabs({
   );
 }
 
+function ProcessingSummary({ queue }: { queue: QueueItem[] }) {
+  const completed = queue.filter(q => q.state === 'done' || q.state === 'error').length;
+  const running = queue.filter(q => q.state === 'analyzing').length;
+  const total = queue.length;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  return (
+    <div className="space-y-3 bg-muted/30 p-3">
+      <div className="flex items-start gap-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-background">
+          <Loader2 className="size-4 animate-spin text-brand" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium">Import et analyse en cours</p>
+            <span className="text-xs text-muted-foreground">{completed}/{total}</span>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            {running > 0 ? `${running} document${running > 1 ? 's' : ''} en extraction` : 'Préparation du prochain document'}
+            {' · '}la recherche sera indexée après confirmation.
+          </p>
+        </div>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-background">
+        <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function QueueRow({ item, onRemove }: { item: QueueItem; onRemove?: () => void }) {
   return (
     <div className="flex items-center gap-3 p-3">
@@ -1009,13 +1101,13 @@ function QueueRow({ item, onRemove }: { item: QueueItem; onRemove?: () => void }
         {item.state === 'analyzing' && (
           <span className="flex items-center gap-1.5 text-xs text-violet-600">
             <Loader2 className="size-3 animate-spin" />
-            Analyse…
+            Import + extraction…
           </span>
         )}
         {item.state === 'done' && (
           <span className="flex items-center gap-1 text-xs text-emerald-600">
             <CheckCircle2 className="size-3.5" />
-            Prêt
+            Prêt pour revue
           </span>
         )}
         {item.state === 'error' && (

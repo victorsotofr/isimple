@@ -59,6 +59,13 @@ export const metadata: Metadata = {
       "max-video-preview": -1,
     },
   },
+  other: {
+    'geo.region': 'FR',
+    'geo.placename': 'France',
+    'ai:llms-txt': absoluteUrl('/llms.txt'),
+    'ai:llms-full-txt': absoluteUrl('/llms-full.txt'),
+    'mcp:manifest': absoluteUrl('/.well-known/mcp'),
+  },
 };
 
 export default function RootLayout({

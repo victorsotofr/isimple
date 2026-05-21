@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     if ('response' in membership) return membership.response;
 
     const payload = await withWorkspaceAISettings(supabase, body);
-    const response = await fetch(`${AGENT_URL}/api/draft`, {
+    const response = await fetch(`${AGENT_URL}/api/chat`, {
       method: 'POST',
       headers: agentJsonHeaders(),
       body: JSON.stringify(payload),

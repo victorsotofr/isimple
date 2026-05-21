@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import type { Database } from '@/db';
-
-const AGENT_URL = process.env.AGENT_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? 'http://localhost:8000';
+import { AGENT_URL, agentJsonHeaders } from '@/app/api/agent/_utils';
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
@@ -38,13 +37,9 @@ export async function POST(request: NextRequest) {
   if (!member) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (process.env.AGENT_INTERNAL_TOKEN) {
-      headers['X-Agent-Token'] = process.env.AGENT_INTERNAL_TOKEN;
-    }
     const response = await fetch(`${AGENT_URL}/api/documents/search`, {
       method: 'POST',
-      headers,
+      headers: agentJsonHeaders(),
       body: JSON.stringify({
         workspace_id: workspaceId,
         query,

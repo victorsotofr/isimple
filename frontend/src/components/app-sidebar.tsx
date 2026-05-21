@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { useWorkspace } from '@/contexts/workspace-context';
 import { useLanguage } from '@/contexts/language-context';
-import { createClient } from '@/lib/supabase-browser';
+import { createClient, getAuthenticatedUser } from '@/lib/supabase-browser';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
@@ -235,9 +235,9 @@ function UserButton({ onNavigate }: { onNavigate: (href: string) => void }) {
   const [name, setName] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null);
-      const meta = data.user?.user_metadata;
+    getAuthenticatedUser(supabase).then(user => {
+      setEmail(user?.email ?? null);
+      const meta = user?.user_metadata;
       const full = meta?.first_name && meta?.last_name
         ? `${meta.first_name} ${meta.last_name}`
         : (meta?.full_name ?? null);

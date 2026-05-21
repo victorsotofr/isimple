@@ -5,6 +5,8 @@ import type { Database, Json } from '@/db';
 
 type ServerSupabaseClient = ReturnType<typeof createServerClient<Database>>;
 
+export const AGENT_URL = process.env.AGENT_URL ?? process.env.NEXT_PUBLIC_AGENT_URL ?? 'http://localhost:8000';
+
 type WorkspaceSettings = {
   ai?: {
     provider?: string;
@@ -12,10 +14,21 @@ type WorkspaceSettings = {
   };
 };
 
-function asObject(value: Json | null | undefined): Record<string, unknown> {
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
+    ? true
+    : false;
+}
+
+function asObject(value: Json | null | undefined): Record<string, unknown> {
+  return isPlainObject(value) ? value : {};
+}
+
+export function agentJsonHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = process.env.AGENT_INTERNAL_TOKEN;
+  if (token) headers['X-Agent-Token'] = token;
+  return headers;
 }
 
 function readAISettings(settings: Json | null | undefined): WorkspaceSettings['ai'] {
@@ -35,6 +48,34 @@ export async function requireUser(
     return { response: NextResponse.json({ error: 'Non authentifié' }, { status: 401 }) };
   }
   return { user };
+}
+
+export async function requireWorkspaceMembership(
+  supabase: ServerSupabaseClient,
+  userId: string,
+  workspaceId: string | null
+): Promise<{ workspaceId: string } | { response: NextResponse }> {
+  if (!workspaceId) {
+    return { response: NextResponse.json({ error: 'workspace_id requis' }, { status: 400 }) };
+  }
+
+  const { data, error } = await supabase
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[agent] workspace membership check failed:', error);
+    return { response: NextResponse.json({ error: 'Vérification workspace impossible' }, { status: 500 }) };
+  }
+
+  if (!data) {
+    return { response: NextResponse.json({ error: 'Accès refusé' }, { status: 403 }) };
+  }
+
+  return { workspaceId };
 }
 
 export async function withWorkspaceAISettings(

@@ -71,6 +71,9 @@ export default function LandingPage() {
         'Traitement et revue de documents locatifs',
         'Recherche documentaire pour agents RAG',
         'Brouillons Gmail validés par le gestionnaire',
+        'Tickets avec priorités, échéances et prestataires',
+        'Suivi de conformité documentaire',
+        'Agenda opérationnel et analytics de portefeuille',
       ],
     },
     {
@@ -134,17 +137,16 @@ export default function LandingPage() {
       </nav>
 
       <section className="relative mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-12 lg:py-28">
-        <div className="absolute left-1/2 top-10 -z-10 size-[520px] -translate-x-1/2 rounded-full bg-brand-muted blur-3xl" />
         <div className="flex flex-col justify-center">
           <div className="mb-7 inline-flex w-fit items-center gap-2 rounded-full bg-brand-muted px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-brand">
             <span className="size-1.5 rounded-full bg-brand" />
             Source de vérité locative
           </div>
-          <h1 className="font-serif text-5xl leading-[1.02] tracking-[-0.04em] text-foreground sm:text-6xl lg:text-7xl">
-            Moins d&apos;admin dispersée. Plus de clarté sur vos biens.
+          <h1 className="font-serif text-5xl leading-[1.02] text-foreground sm:text-6xl lg:text-7xl">
+            isimple, gestion locative IA.
           </h1>
           <p className="mt-6 max-w-xl text-lg font-light leading-8 text-muted-foreground">
-            isimple réunit messages, documents, locataires et interventions dans une source de vérité pensée pour les propriétaires et gestionnaires en France.
+            Moins d&apos;admin dispersée, plus de clarté sur vos biens. isimple réunit messages, documents, locataires, tickets, prestataires et interventions dans une source de vérité pensée pour les gestionnaires en France.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -175,7 +177,7 @@ export default function LandingPage() {
         <div className="mb-10 grid gap-6 lg:grid-cols-[0.8fr_1fr] lg:items-end">
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-brand">+ Fonctionnalités</p>
-            <h2 className="font-serif text-4xl leading-tight tracking-tight">Tout ce qui compte, au même endroit.</h2>
+            <h2 className="font-serif text-4xl leading-tight">Tout ce qui compte, au même endroit.</h2>
           </div>
           <p className="max-w-2xl text-muted-foreground">
             Le produit priorise les files à traiter, les informations extraites et les actions rapides. L&apos;objectif n&apos;est pas de tout automatiser, mais de supprimer les angles morts.
@@ -197,7 +199,7 @@ export default function LandingPage() {
       <section id="workflow" className="mx-auto grid max-w-6xl gap-12 border-t px-5 py-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-12">
         <div>
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-brand">+ Méthode</p>
-          <h2 className="font-serif text-4xl leading-tight tracking-tight">Un workflow simple, mais assez puissant pour grandir.</h2>
+          <h2 className="font-serif text-4xl leading-tight">Un workflow simple, mais assez puissant pour grandir.</h2>
           <p className="mt-5 text-muted-foreground">
             Le produit reste volontairement compact: capturer, qualifier, agir, archiver. Le socle IA reste agnostique pour évoluer avec les meilleurs modèles.
           </p>
@@ -220,7 +222,7 @@ export default function LandingPage() {
           <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-brand">Prêt à tester</p>
-              <h2 className="font-serif text-4xl leading-tight tracking-tight">Créez votre espace, ajoutez un bien, importez un document.</h2>
+              <h2 className="font-serif text-4xl leading-tight">Créez votre espace, ajoutez un bien, importez un document.</h2>
             </div>
             <Link
               href="/signup"
@@ -289,7 +291,7 @@ export default function LandingPage() {
 
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-[-0.12em] left-[max(20px,calc((100vw-72rem)/2))] select-none whitespace-nowrap font-serif text-[clamp(104px,20vw,360px)] leading-none tracking-[-0.08em] text-[#ecebe8]"
+          className="pointer-events-none absolute bottom-[-0.12em] left-[max(20px,calc((100vw-72rem)/2))] select-none whitespace-nowrap font-serif text-[clamp(104px,20vw,360px)] leading-none text-[#ecebe8]"
         >
           isimple
         </div>

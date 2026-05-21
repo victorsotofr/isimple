@@ -8,6 +8,9 @@
     "build": "pnpm --dir frontend build",
     "lint": "pnpm --dir frontend lint",
     "typecheck": "pnpm --dir frontend typecheck",
+    "test": "pnpm lint && pnpm typecheck && pnpm build && pnpm test:backend",
+    "test:backend": "cd backend && uv run ruff check src",
+    "smoke": "node scripts/smoke.mjs",
     "seed": "pnpm --dir frontend seed"
   },
   "devDependencies": {

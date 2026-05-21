@@ -15,9 +15,22 @@ from ..tools.supabase_tools import index_document, search_documents, unindex_doc
 router = APIRouter(tags=["documents"])
 
 
+def is_local_dev() -> bool:
+    dev_envs = {"dev", "development", "local"}
+    return any(
+        os.environ.get(key, "").lower() in dev_envs
+        for key in ("APP_ENV", "ENVIRONMENT", "FASTAPI_ENV", "PYTHON_ENV")
+    )
+
+
 def require_internal_token(x_agent_token: str | None) -> None:
     expected = os.environ.get("AGENT_INTERNAL_TOKEN")
-    if expected and x_agent_token != expected:
+    if not expected:
+        if is_local_dev():
+            return
+        raise HTTPException(status_code=503, detail="Internal agent token is not configured.")
+
+    if x_agent_token != expected:
         raise HTTPException(status_code=401, detail="Invalid internal agent token.")
 
 
